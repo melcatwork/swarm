@@ -14,7 +14,9 @@ Swarm TM is an advanced threat modeling system that uses AI-powered agent swarms
 - **Threat Intelligence**: Real-time threat intel from multiple sources (NIST NVD, CISA KEV, MITRE ATT&CK)
 - **Multiple LLM Support**: Works with AWS Bedrock, Anthropic API, or Ollama (local)
 
-## 📋 Architecture
+## 📋 Architecture Overview
+<img width="2455" height="1361" alt="image" src="https://github.com/user-attachments/assets/6af85187-43f5-407b-a1ae-6f483911a3c5" />
+
 
 ### Swarm Intelligence System
 
