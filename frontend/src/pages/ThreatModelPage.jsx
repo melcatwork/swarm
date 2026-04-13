@@ -1,0 +1,1669 @@
+import { useState, useEffect } from 'react';
+import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save } from 'lucide-react';
+import Toast from '../components/Toast';
+import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels } from '../api/client';
+import './ThreatModelPage.css';
+
+function ThreatModelPage() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [currentPhase, setCurrentPhase] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [expandedPaths, setExpandedPaths] = useState(new Set());
+  const [personas, setPersonas] = useState({});
+  const [selectedAgent, setSelectedAgent] = useState('apt29_cozy_bear');
+  const [heartbeat, setHeartbeat] = useState(0);
+
+  // LLM model selection state
+  const [availableModels, setAvailableModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState(null); // null = use default from .env
+
+  // Post-mitigation analysis state
+  const [selectedMitigations, setSelectedMitigations] = useState({});
+  const [postMitigationAnalysis, setPostMitigationAnalysis] = useState(null);
+  const [analyzingMitigations, setAnalyzingMitigations] = useState(false);
+  const [viewMode, setViewMode] = useState('pre'); // 'pre', 'post', 'comparison'
+
+  // Archived runs state
+  const [archivedRuns, setArchivedRuns] = useState([]);
+  const [editingRunId, setEditingRunId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+
+  // Helper function to format execution time
+  const formatExecutionTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    if (minutes > 0) {
+      return `${minutes}m ${remainingSeconds}s`;
+    }
+    return `${remainingSeconds}s`;
+  };
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const validExtensions = ['.tf', '.yaml', '.yml', '.json'];
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+
+      if (validExtensions.includes(fileExtension)) {
+        setSelectedFile(file);
+        setError(null);
+        setResult(null);
+      } else {
+        setError('Invalid file type. Please select a .tf, .yaml, .yml, or .json file.');
+        setSelectedFile(null);
+      }
+    }
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      const validExtensions = ['.tf', '.yaml', '.yml', '.json'];
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+
+      if (validExtensions.includes(fileExtension)) {
+        setSelectedFile(file);
+        setError(null);
+        setResult(null);
+      } else {
+        setError('Invalid file type. Please select a .tf, .yaml, .yml, or .json file.');
+      }
+    }
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+  };
+
+  // Fetch available personas and models on mount
+  useEffect(() => {
+    const fetchPersonas = async () => {
+      try {
+        const data = await getPersonas();
+        setPersonas(data);
+      } catch (err) {
+        console.error('Failed to fetch personas:', err);
+      }
+    };
+
+    const fetchModels = async () => {
+      try {
+        const data = await getAvailableModels();
+        setAvailableModels(data.models || []);
+        // Set default to current model if not selected
+        if (!selectedModel && data.current_model) {
+          // Don't set it - leave as null to use .env default
+        }
+      } catch (err) {
+        console.error('Failed to fetch models:', err);
+      }
+    };
+
+    fetchPersonas();
+    fetchModels();
+  }, []);
+
+  // Heartbeat effect to show test is alive
+  useEffect(() => {
+    let interval;
+    if (running) {
+      interval = setInterval(() => {
+        setHeartbeat(prev => prev + 1);
+      }, 1000);
+    } else {
+      setHeartbeat(0);
+    }
+    return () => clearInterval(interval);
+  }, [running]);
+
+  // Load archived runs on mount and after successful pipeline runs
+  useEffect(() => {
+    loadArchivedRuns();
+  }, []);
+
+  // Reload archived runs when result changes (new run completed)
+  useEffect(() => {
+    if (result && result.status === 'ok') {
+      loadArchivedRuns();
+    }
+  }, [result]);
+
+  const loadArchivedRuns = async () => {
+    try {
+      const data = await getArchivedRuns();
+      setArchivedRuns(data.runs || []);
+    } catch (err) {
+      console.error('Failed to load archived runs:', err);
+    }
+  };
+
+  const handleLoadArchivedRun = async (runId) => {
+    try {
+      const data = await getArchivedRun(runId);
+      setResult(data.result);
+      setSelectedMitigations({});
+      setPostMitigationAnalysis(null);
+      setViewMode('pre');
+      setToast({
+        message: `Loaded archived run: ${data.metadata.name}`,
+        type: 'success',
+      });
+    } catch (err) {
+      setToast({
+        message: `Failed to load run: ${err.message}`,
+        type: 'error',
+      });
+    }
+  };
+
+  const handleStartEditRunName = (runId, currentName) => {
+    setEditingRunId(runId);
+    setEditingName(currentName);
+  };
+
+  const handleSaveRunName = async (runId) => {
+    try {
+      await updateRunName(runId, editingName);
+      setEditingRunId(null);
+      setEditingName('');
+      loadArchivedRuns();
+      setToast({
+        message: 'Run name updated successfully',
+        type: 'success',
+      });
+    } catch (err) {
+      setToast({
+        message: `Failed to update name: ${err.message}`,
+        type: 'error',
+      });
+    }
+  };
+
+  const handleCancelEditRunName = () => {
+    setEditingRunId(null);
+    setEditingName('');
+  };
+
+  const handleDeleteRun = async (runId, runName) => {
+    if (!window.confirm(`Are you sure you want to delete "${runName}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteArchivedRun(runId);
+      loadArchivedRuns();
+      setToast({
+        message: 'Run deleted successfully',
+        type: 'success',
+      });
+    } catch (err) {
+      setToast({
+        message: `Failed to delete run: ${err.message}`,
+        type: 'error',
+      });
+    }
+  };
+
+  const runSwarm = async (mode = 'full') => {
+    if (!selectedFile) {
+      setError('Please select a file first');
+      return;
+    }
+
+    if (mode === 'single' && !selectedAgent) {
+      setError('Please select an agent first');
+      return;
+    }
+
+    try {
+      setRunning(true);
+      setError(null);
+      setResult(null);
+
+      // Simulate phase updates (since the API is synchronous)
+      const phases = [
+        'Parsing IaC file...',
+        'Running Exploration Swarm...',
+        'Evaluating Paths...',
+        'Adversarial Validation...',
+        'Mapping Mitigations...'
+      ];
+
+      let phaseIndex = 0;
+      const phaseInterval = setInterval(() => {
+        if (phaseIndex < phases.length) {
+          setCurrentPhase(phases[phaseIndex]);
+          phaseIndex++;
+        }
+      }, mode === 'quick' || mode === 'single' ? 2000 : 4000);
+
+      let data;
+      if (mode === 'quick') {
+        data = await uploadAndRunQuick(selectedFile, selectedModel);
+      } else if (mode === 'single') {
+        data = await uploadAndRunSingleAgent(selectedFile, selectedAgent);
+      } else {
+        data = await uploadAndRunSwarm(selectedFile);
+      }
+
+      clearInterval(phaseInterval);
+
+      if (data.status === 'ok') {
+        setResult(data);
+        const agentInfo = mode === 'single' ? ` using ${personas[selectedAgent]?.display_name || selectedAgent}` : '';
+        setToast({
+          message: `Threat model complete${agentInfo}! Found ${data.final_paths.length} attack paths.`,
+          type: 'success'
+        });
+      } else {
+        setError(data.error || 'Failed to run threat model');
+      }
+    } catch (err) {
+      console.error('Failed to run swarm:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to run threat model');
+      setToast({
+        message: 'Failed to run threat model',
+        type: 'error'
+      });
+    } finally {
+      setRunning(false);
+      setCurrentPhase('');
+    }
+  };
+
+  const togglePathExpanded = (index) => {
+    const newExpanded = new Set(expandedPaths);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedPaths(newExpanded);
+  };
+
+  const getConfidenceBadge = (confidence) => {
+    const badges = {
+      high: { color: '#10b981', bg: '#d1fae5', label: 'HIGH' },
+      medium: { color: '#f59e0b', bg: '#fef3c7', label: 'MEDIUM' },
+      low: { color: '#ef4444', bg: '#fee2e2', label: 'LOW' }
+    };
+    return badges[confidence] || badges.medium;
+  };
+
+  const getKillChainPhaseColor = (phase) => {
+    const colors = {
+      'Reconnaissance': { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' },
+      'Initial Access': { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },
+      'Execution & Persistence': { bg: '#fed7aa', border: '#f97316', text: '#9a3412' },
+      'Lateral Movement & Privilege Escalation': { bg: '#e9d5ff', border: '#a855f7', text: '#6b21a8' },
+      'Objective (Exfiltration/Impact)': { bg: '#fecaca', border: '#ef4444', text: '#991b1b' },
+      'Covering Tracks': { bg: '#e5e7eb', border: '#6b7280', text: '#1f2937' },
+    };
+    return colors[phase] || colors['Reconnaissance'];
+  };
+
+  const getImpactTypeColor = (impactType) => {
+    const colors = {
+      confidentiality: { bg: '#dbeafe', text: '#1e40af', label: 'Confidentiality' },
+      integrity: { bg: '#fed7aa', text: '#9a3412', label: 'Integrity' },
+      availability: { bg: '#fecaca', text: '#991b1b', label: 'Availability' },
+    };
+    return colors[impactType] || colors.confidentiality;
+  };
+
+  const formatTechniqueUrl = (techniqueId) => {
+    // Convert T1566.001 to T1566/001 for MITRE ATT&CK URL
+    const formatted = techniqueId.replace('.', '/');
+    return `https://attack.mitre.org/techniques/${formatted}/`;
+  };
+
+  const copyMitigationsToClipboard = (steps) => {
+    const mitigationText = steps
+      .map((step, idx) => {
+        const mitigation = step.mitigation;
+        if (!mitigation) return '';
+        return `Step ${idx + 1} - ${step.kill_chain_phase}\n` +
+               `Technique: ${step.technique_id} - ${step.technique_name}\n` +
+               `Mitigation: ${mitigation.mitigation_name}\n` +
+               `Description: ${mitigation.description}\n` +
+               `AWS Action: ${mitigation.aws_service_action}\n\n`;
+      })
+      .filter(Boolean)
+      .join('---\n\n');
+
+    navigator.clipboard.writeText(mitigationText);
+    setToast({
+      message: 'Mitigations copied to clipboard!',
+      type: 'success'
+    });
+  };
+
+  // Handle mitigation checkbox toggle
+  const toggleMitigationSelection = (pathId, stepNumber, mitigationId) => {
+    const key = `${pathId}:${stepNumber}:${mitigationId}`;
+    setSelectedMitigations(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  // Select all mitigations for a path
+  const selectAllMitigations = (path) => {
+    const newSelections = {};
+    path.steps.forEach(step => {
+      if (step.mitigation) {
+        const key = `${path.id}:${step.step_number}:${step.mitigation.mitigation_id}`;
+        newSelections[key] = true;
+      }
+    });
+    setSelectedMitigations(prev => ({ ...prev, ...newSelections }));
+  };
+
+  // Clear all mitigation selections
+  const clearAllMitigations = () => {
+    setSelectedMitigations({});
+    setPostMitigationAnalysis(null);
+    setViewMode('pre');
+  };
+
+  // Apply selected mitigations and run post-mitigation analysis
+  const applyMitigations = async () => {
+    if (!result || !result.final_paths) {
+      setToast({
+        message: 'No attack paths to analyze',
+        type: 'error'
+      });
+      return;
+    }
+
+    // Convert selectedMitigations object to array format expected by API
+    const mitigationSelections = Object.entries(selectedMitigations)
+      .filter(([_, selected]) => selected)
+      .map(([key, _]) => {
+        const [pathId, stepNumber, mitigationId] = key.split(':');
+        return {
+          path_id: pathId,
+          step_number: parseInt(stepNumber),
+          mitigation_id: mitigationId,
+          selected: true
+        };
+      });
+
+    if (mitigationSelections.length === 0) {
+      setToast({
+        message: 'Please select at least one mitigation to apply',
+        type: 'warning'
+      });
+      return;
+    }
+
+    try {
+      setAnalyzingMitigations(true);
+      setError(null);
+
+      const data = await analyzePostMitigation(result.final_paths, mitigationSelections);
+
+      if (data.status === 'ok') {
+        setPostMitigationAnalysis(data);
+        setViewMode('comparison');
+        setToast({
+          message: `Analysis complete! Risk reduced by ${data.residual_risk.risk_reduction_percentage.toFixed(1)}%`,
+          type: 'success'
+        });
+      } else {
+        setError(data.error || 'Failed to analyze mitigations');
+        setToast({
+          message: 'Failed to analyze mitigations',
+          type: 'error'
+        });
+      }
+    } catch (err) {
+      console.error('Failed to analyze mitigations:', err);
+      setError(err.message || 'Failed to analyze mitigations');
+      setToast({
+        message: 'Failed to analyze mitigations',
+        type: 'error'
+      });
+    } finally {
+      setAnalyzingMitigations(false);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  // Group assets by trust boundary
+  const groupAssetsByBoundary = (assetGraph) => {
+    const assets = assetGraph.assets || [];
+    const boundaries = {};
+
+    assets.forEach(asset => {
+      const boundary = asset.trust_boundary || 'unknown';
+      if (!boundaries[boundary]) {
+        boundaries[boundary] = [];
+      }
+      boundaries[boundary].push(asset);
+    });
+
+    return boundaries;
+  };
+
+  return (
+    <div className="threat-model-page">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <div className="page-header">
+        <div>
+          <h2>Threat Modeling</h2>
+          <p className="page-subtitle">
+            Multi-agent swarm analysis of infrastructure attack paths
+          </p>
+        </div>
+      </div>
+
+      <div className="page-content-with-sidebar">
+        {/* Sidebar: Archived Runs */}
+        <div className="archived-runs-sidebar">
+          <div className="sidebar-header">
+            <Archive size={20} />
+            <h3>Archived Runs</h3>
+          </div>
+
+          <div className="archived-runs-list">
+            {archivedRuns.length === 0 ? (
+              <div className="no-runs-message">
+                <p>No archived runs yet</p>
+                <p className="hint">Complete a threat model to create your first archive</p>
+              </div>
+            ) : (
+              archivedRuns.map((run) => (
+                <div key={run.run_id} className="archived-run-item">
+                  {editingRunId === run.run_id ? (
+                    <div className="editing-run-name">
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        className="edit-name-input"
+                        autoFocus
+                      />
+                      <div className="edit-actions">
+                        <button
+                          onClick={() => handleSaveRunName(run.run_id)}
+                          className="btn-icon btn-save"
+                          title="Save"
+                        >
+                          <Save size={16} />
+                        </button>
+                        <button
+                          onClick={handleCancelEditRunName}
+                          className="btn-icon btn-cancel"
+                          title="Cancel"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        className="run-info"
+                        onClick={() => handleLoadArchivedRun(run.run_id)}
+                      >
+                        {/* Model Used */}
+                        <div className="run-header">
+                          {run.model_used ? (
+                            <span className="model-badge-main">{run.model_used}</span>
+                          ) : (
+                            <span className="model-badge-main unknown">Model Unknown</span>
+                          )}
+                          <span className="run-mode-badge">{run.mode}</span>
+                        </div>
+
+                        {/* System Time of Run */}
+                        <div className="run-timestamp">
+                          <span className="timestamp-icon">🕐</span>
+                          <span className="timestamp-text">
+                            {new Date(run.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })} at {new Date(run.created_at).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
+                          </span>
+                        </div>
+
+                        {/* File Used */}
+                        <div className="run-file-info">
+                          <span className="file-icon">📄</span>
+                          <span className="file-name">{run.file_name}</span>
+                        </div>
+
+                        {/* Attack Paths Count */}
+                        <div className="run-paths-info">
+                          <span className="paths-icon">🎯</span>
+                          <span className="paths-text">
+                            <strong>{run.paths_count}</strong> attack path{run.paths_count !== 1 ? 's' : ''} identified
+                          </span>
+                        </div>
+
+                        {/* Execution Time */}
+                        <div className="run-duration-info">
+                          <span className="duration-icon">⏱️</span>
+                          <span className="duration-text">
+                            Completed in <strong>{formatExecutionTime(run.execution_time_seconds)}</strong>
+                          </span>
+                        </div>
+                      </div>
+                      <div className="run-actions">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEditRunName(run.run_id, run.name);
+                          }}
+                          className="btn-icon"
+                          title="Edit name"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteRun(run.run_id, run.name);
+                          }}
+                          className="btn-icon btn-delete"
+                          title="Delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="main-content">
+
+      {/* Section A: Upload Panel */}
+      <div className="upload-panel">
+        <h3>Upload Infrastructure-as-Code</h3>
+
+        <div
+          className={`file-dropzone ${selectedFile ? 'has-file' : ''}`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
+          {!selectedFile ? (
+            <>
+              <Upload size={48} className="dropzone-icon" />
+              <p className="dropzone-text">Drop your IaC file here or click to browse</p>
+              <p className="dropzone-hint">Supports .tf, .yaml, .yml, .json files</p>
+              <input
+                type="file"
+                accept=".tf,.yaml,.yml,.json"
+                onChange={handleFileSelect}
+                className="file-input"
+              />
+            </>
+          ) : (
+            <div className="selected-file-info">
+              <CheckCircle size={32} className="file-check-icon" />
+              <div className="file-details">
+                <p className="file-name">{selectedFile.name}</p>
+                <p className="file-size">{formatFileSize(selectedFile.size)}</p>
+              </div>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setSelectedFile(null)}
+                disabled={running}
+              >
+                Remove
+              </button>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="error-message">
+            <AlertTriangle size={16} />
+            {error}
+          </div>
+        )}
+
+        {/* Agent Selection for Single Agent Test */}
+        <div className="agent-selection">
+          <label htmlFor="agent-select" className="agent-label">
+            <User size={16} />
+            Select Agent for Single Test
+          </label>
+          <select
+            id="agent-select"
+            value={selectedAgent}
+            onChange={(e) => setSelectedAgent(e.target.value)}
+            disabled={running || Object.keys(personas).length === 0}
+            className="agent-select"
+          >
+            {Object.keys(personas).length === 0 ? (
+              <option value="">Loading agents...</option>
+            ) : (
+              Object.entries(personas).map(([key, persona]) => (
+                <option key={key} value={key}>
+                  {persona.display_name} ({persona.category})
+                </option>
+              ))
+            )}
+          </select>
+          <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', marginBottom: 0 }}>
+            Test with a specific threat actor persona to understand their unique attack perspective
+          </p>
+        </div>
+
+        {/* LLM Model Selection */}
+        <div className="agent-selection">
+          <label htmlFor="model-select" className="agent-label">
+            <Zap size={16} />
+            Select LLM Model
+          </label>
+          <select
+            id="model-select"
+            value={selectedModel || ''}
+            onChange={(e) => setSelectedModel(e.target.value || null)}
+            disabled={running || availableModels.length === 0}
+            className="agent-select"
+          >
+            <option value="">Use default from .env</option>
+            {availableModels.length === 0 ? (
+              <option value="">Loading models...</option>
+            ) : (
+              availableModels.map((model) => (
+                <option
+                  key={`${model.provider}-${model.name}`}
+                  value={model.name}
+                  disabled={!model.available}
+                >
+                  {model.display_name} {!model.available ? '(Not Available)' : model.is_default ? '(Current Default)' : ''}
+                </option>
+              ))
+            )}
+          </select>
+          <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', marginBottom: 0 }}>
+            Choose which LLM model to use for threat modeling. Leave as default to use the model configured in .env
+          </p>
+        </div>
+
+        <div className="run-buttons">
+          <button
+            className="btn btn-primary"
+            onClick={() => runSwarm('full')}
+            disabled={!selectedFile || running}
+          >
+            <Play size={16} />
+            {running && currentPhase ? currentPhase : 'Run Full Swarm (All agents)'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => runSwarm('quick')}
+            disabled={!selectedFile || running}
+          >
+            <Zap size={16} />
+            Quick Run (2 agents)
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => runSwarm('single')}
+            disabled={!selectedFile || running || !selectedAgent}
+          >
+            <User size={16} />
+            Single Agent Test
+          </button>
+        </div>
+
+        {running && (
+          <div className="progress-indicator">
+            <div className="progress-bar">
+              <div className="progress-bar-fill"></div>
+            </div>
+            <p className="progress-text">
+              {currentPhase}
+              <span className="heartbeat-indicator">
+                {' '} Running for {heartbeat}s...
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Section B: Asset Graph View */}
+      {result && result.asset_graph && (
+        <div className="asset-graph-panel">
+          <h3>Infrastructure Asset Graph</h3>
+
+          <div className="asset-summary-stats">
+            <div className="stat-card">
+              <span className="stat-value">{result.asset_graph.assets?.length || 0}</span>
+              <span className="stat-label">Total Assets</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-value">{result.asset_graph.relationships?.length || 0}</span>
+              <span className="stat-label">Relationships</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-value">{result.asset_graph.trust_boundaries?.length || 0}</span>
+              <span className="stat-label">Trust Boundaries</span>
+            </div>
+          </div>
+
+          <div className="asset-table-container">
+            {Object.entries(groupAssetsByBoundary(result.asset_graph)).map(([boundary, assets]) => (
+              <div key={boundary} className="boundary-group">
+                <h4 className="boundary-header">
+                  <Shield size={16} />
+                  {boundary}
+                  <span className="boundary-count">({assets.length} assets)</span>
+                </h4>
+                <table className="asset-table">
+                  <thead>
+                    <tr>
+                      <th>Asset Name</th>
+                      <th>Type</th>
+                      <th>Service</th>
+                      <th>Internet Facing</th>
+                      <th>Trust Boundary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assets.map((asset, idx) => (
+                      <tr key={idx}>
+                        <td className="asset-name">{asset.name}</td>
+                        <td>{asset.type}</td>
+                        <td>{asset.service}</td>
+                        <td>
+                          {asset.properties?.internet_facing ? (
+                            <span className="badge badge-warning">Yes</span>
+                          ) : (
+                            <span className="badge badge-success">No</span>
+                          )}
+                        </td>
+                        <td>{asset.trust_boundary || 'unknown'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Section C: Results View */}
+      {result && result.final_paths && (
+        <div className="results-panel">
+          {/* Executive Summary */}
+          {result.executive_summary && (
+            <div className="executive-summary">
+              <h3>Executive Summary</h3>
+              <p>{result.executive_summary}</p>
+            </div>
+          )}
+
+          {/* Stats Bar */}
+          <div className="results-stats-bar">
+            <div className="stat-item">
+              <span className="stat-label">Total Paths</span>
+              <span className="stat-value">{result.final_paths.length}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Avg Confidence</span>
+              <span className="stat-value">
+                {result.final_paths.filter(p => p.confidence === 'high').length}H /
+                {result.final_paths.filter(p => p.confidence === 'medium').length}M /
+                {result.final_paths.filter(p => p.confidence === 'low').length}L
+              </span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Coverage</span>
+              <span className="stat-value">{result.adversarial_summary?.coverage_estimate || 'N/A'}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Execution Time</span>
+              <span className="stat-value">{Math.round(result.execution_time_seconds / 60)}m</span>
+            </div>
+          </div>
+
+          {/* Attack Path Cards */}
+          <div className="attack-paths-list">
+            <h3>Attack Paths ({result.final_paths.length})</h3>
+
+            {result.final_paths.map((path, pathIndex) => {
+              const isExpanded = expandedPaths.has(pathIndex);
+              const confidenceBadge = getConfidenceBadge(path.confidence);
+              const evaluation = path.evaluation || {};
+              const impactColor = getImpactTypeColor(path.impact_type);
+              const compositeScore = evaluation.composite_score || path.composite_score;
+
+              return (
+                <div key={pathIndex} className="attack-path-card-v2">
+                  {/* Header Section */}
+                  <div className="path-header-v2">
+                    <div className="path-title-section">
+                      <h4 className="path-name-v2">{path.name}</h4>
+                      {path.objective && (
+                        <div className="path-objective">
+                          <strong>Objective:</strong> {path.objective}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="path-badges-section">
+                      <span className="badge badge-actor">{path.threat_actor || 'Unknown Actor'}</span>
+                      <span
+                        className="badge badge-impact"
+                        style={{ backgroundColor: impactColor.bg, color: impactColor.text }}
+                      >
+                        {impactColor.label}
+                      </span>
+                      <span className="badge badge-difficulty">{path.difficulty}</span>
+                      {path.challenged && (
+                        <span className="badge badge-challenged">Challenged</span>
+                      )}
+                      <span
+                        className="badge badge-confidence"
+                        style={{ backgroundColor: confidenceBadge.bg, color: confidenceBadge.color }}
+                      >
+                        {confidenceBadge.label}
+                      </span>
+                    </div>
+
+                    {compositeScore && (
+                      <div className="path-score-indicator">
+                        <div className="score-circle">
+                          <span className="score-value">{compositeScore.toFixed(1)}</span>
+                          <span className="score-label">/10</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Kill Chain Visualization */}
+                  <div className="kill-chain-container">
+                    <div className="kill-chain-pipeline">
+                      {path.steps?.map((step, stepIndex) => {
+                        const phaseColor = getKillChainPhaseColor(step.kill_chain_phase);
+                        const isLastStep = stepIndex === path.steps.length - 1;
+
+                        return (
+                          <div key={stepIndex} className="kill-chain-step-wrapper">
+                            <div className="kill-chain-step" style={{ borderColor: phaseColor.border }}>
+                              <div
+                                className="step-phase-header"
+                                style={{
+                                  backgroundColor: phaseColor.bg,
+                                  color: phaseColor.text,
+                                  borderBottom: `2px solid ${phaseColor.border}`
+                                }}
+                              >
+                                <span className="step-number-badge">{step.step_number || stepIndex + 1}</span>
+                                <span className="phase-name">{step.kill_chain_phase}</span>
+                              </div>
+
+                              <div className="step-content">
+                                <div className="step-technique-row">
+                                  <a
+                                    href={formatTechniqueUrl(step.technique_id)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="technique-badge"
+                                    title="View on MITRE ATT&CK"
+                                  >
+                                    {step.technique_id}
+                                  </a>
+                                  <span className="technique-name-display">{step.technique_name}</span>
+                                </div>
+
+                                <div className="step-target-row">
+                                  <strong>Target:</strong> <code>{step.target_asset}</code>
+                                </div>
+
+                                <p className="step-action">
+                                  {step.action_description || step.description}
+                                </p>
+
+                                {step.outcome && (
+                                  <div className="step-outcome-box">
+                                    <strong>Outcome:</strong> {step.outcome}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {!isLastStep && (
+                              <div className="kill-chain-arrow">
+                                <ChevronDown size={24} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Mitigations Section (Expandable) - Defense in Depth */}
+                  <div className="mitigations-section">
+                    <button
+                      className="btn btn-secondary mitigations-toggle"
+                      onClick={() => togglePathExpanded(pathIndex)}
+                    >
+                      <Shield size={16} />
+                      {isExpanded ? 'Hide Defense-in-Depth Mitigations' : 'Show Defense-in-Depth Mitigations'}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="mitigations-content">
+                        <div className="mitigations-header">
+                          <div>
+                            <h5>Defense-in-Depth Mitigations</h5>
+                            <p style={{fontSize: '0.875rem', color: '#64748b', margin: '0.5rem 0'}}>
+                              Multiple layers of security controls following Cyber by Design principles
+                            </p>
+                          </div>
+                          <div className="mitigations-header-actions">
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => selectAllMitigations(path)}
+                            >
+                              <CheckCircle size={14} />
+                              Select All
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => copyMitigationsToClipboard(path.steps)}
+                            >
+                              Copy All
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Defense Layer Legend */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                          gap: '0.75rem',
+                          margin: '1rem 0',
+                          padding: '1rem',
+                          background: '#f8fafc',
+                          borderRadius: '0.5rem',
+                        }}>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                            <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#10b981'}}></div>
+                            <span style={{fontSize: '0.875rem', fontWeight: 500}}>Preventive</span>
+                          </div>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                            <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6'}}></div>
+                            <span style={{fontSize: '0.875rem', fontWeight: 500}}>Detective</span>
+                          </div>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                            <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b'}}></div>
+                            <span style={{fontSize: '0.875rem', fontWeight: 500}}>Corrective</span>
+                          </div>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                            <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#8b5cf6'}}></div>
+                            <span style={{fontSize: '0.875rem', fontWeight: 500}}>Administrative</span>
+                          </div>
+                        </div>
+
+                        {/* Mitigations by Step */}
+                        <div className="mitigations-by-step">
+                          {path.steps?.map((step, stepIndex) => {
+                            const mitigationsByLayer = step.mitigations_by_layer || {};
+                            const hasMitigations = Object.keys(mitigationsByLayer).length > 0;
+
+                            // Fallback to single mitigation if no layered mitigations
+                            const singleMitigation = step.mitigation;
+
+                            if (!hasMitigations && !singleMitigation) return null;
+
+                            return (
+                              <div key={stepIndex} className="step-mitigations-container" style={{
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '0.5rem',
+                                padding: '1rem',
+                                marginBottom: '1rem',
+                              }}>
+                                {/* Step Header */}
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.75rem',
+                                  marginBottom: '1rem',
+                                  paddingBottom: '0.75rem',
+                                  borderBottom: '2px solid #e2e8f0',
+                                }}>
+                                  <span style={{
+                                    background: '#3b82f6',
+                                    color: 'white',
+                                    padding: '0.25rem 0.75rem',
+                                    borderRadius: '0.25rem',
+                                    fontWeight: 600,
+                                    fontSize: '0.875rem',
+                                  }}>
+                                    Step {step.step_number}
+                                  </span>
+                                  <div>
+                                    <div style={{fontWeight: 600, fontSize: '0.9375rem'}}>{step.technique_id} - {step.technique_name}</div>
+                                    <div style={{fontSize: '0.8125rem', color: '#64748b'}}>{step.kill_chain_phase}</div>
+                                  </div>
+                                </div>
+
+                                {/* Defense Layers */}
+                                {hasMitigations ? (
+                                  <div className="defense-layers">
+                                    {/* Preventive Layer */}
+                                    {mitigationsByLayer.preventive && mitigationsByLayer.preventive.length > 0 && (
+                                      <div className="defense-layer" style={{marginBottom: '1rem'}}>
+                                        <div style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          marginBottom: '0.75rem',
+                                          fontSize: '0.9375rem',
+                                          fontWeight: 600,
+                                          color: '#10b981',
+                                        }}>
+                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#10b981'}}></div>
+                                          Preventive Controls ({mitigationsByLayer.preventive.length})
+                                        </div>
+                                        {mitigationsByLayer.preventive.map((mit, mitIndex) => renderLayeredMitigation(mit, step, path.id, mitIndex, 'preventive'))}
+                                      </div>
+                                    )}
+
+                                    {/* Detective Layer */}
+                                    {mitigationsByLayer.detective && mitigationsByLayer.detective.length > 0 && (
+                                      <div className="defense-layer" style={{marginBottom: '1rem'}}>
+                                        <div style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          marginBottom: '0.75rem',
+                                          fontSize: '0.9375rem',
+                                          fontWeight: 600,
+                                          color: '#3b82f6',
+                                        }}>
+                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6'}}></div>
+                                          Detective Controls ({mitigationsByLayer.detective.length})
+                                        </div>
+                                        {mitigationsByLayer.detective.map((mit, mitIndex) => renderLayeredMitigation(mit, step, path.id, mitIndex, 'detective'))}
+                                      </div>
+                                    )}
+
+                                    {/* Corrective Layer */}
+                                    {mitigationsByLayer.corrective && mitigationsByLayer.corrective.length > 0 && (
+                                      <div className="defense-layer" style={{marginBottom: '1rem'}}>
+                                        <div style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          marginBottom: '0.75rem',
+                                          fontSize: '0.9375rem',
+                                          fontWeight: 600,
+                                          color: '#f59e0b',
+                                        }}>
+                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b'}}></div>
+                                          Corrective Controls ({mitigationsByLayer.corrective.length})
+                                        </div>
+                                        {mitigationsByLayer.corrective.map((mit, mitIndex) => renderLayeredMitigation(mit, step, path.id, mitIndex, 'corrective'))}
+                                      </div>
+                                    )}
+
+                                    {/* Administrative Layer */}
+                                    {mitigationsByLayer.administrative && mitigationsByLayer.administrative.length > 0 && (
+                                      <div className="defense-layer" style={{marginBottom: '1rem'}}>
+                                        <div style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem',
+                                          marginBottom: '0.75rem',
+                                          fontSize: '0.9375rem',
+                                          fontWeight: 600,
+                                          color: '#8b5cf6',
+                                        }}>
+                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#8b5cf6'}}></div>
+                                          Administrative Controls ({mitigationsByLayer.administrative.length})
+                                        </div>
+                                        {mitigationsByLayer.administrative.map((mit, mitIndex) => renderLayeredMitigation(mit, step, path.id, mitIndex, 'administrative'))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  /* Fallback: Show single mitigation if no layered mitigations */
+                                  singleMitigation && renderSingleMitigation(singleMitigation, step, path.id)
+                                )}
+                              </div>
+                            );
+
+                            // Helper function to render layered mitigation
+                            function renderLayeredMitigation(mitigation, step, pathId, mitIndex, layer) {
+                              const selectionKey = `${pathId}:${step.step_number}:${mitigation.mitigation_id}`;
+                              const isSelected = selectedMitigations[selectionKey] || false;
+
+                              const priorityColors = {
+                                critical: {bg: '#fee2e2', text: '#991b1b'},
+                                high: {bg: '#fed7aa', text: '#9a3412'},
+                                medium: {bg: '#fef3c7', text: '#92400e'},
+                                low: {bg: '#dbeafe', text: '#1e40af'},
+                              };
+                              const priorityColor = priorityColors[mitigation.priority] || priorityColors.medium;
+
+                              return (
+                                <div key={mitIndex} style={{
+                                  background: '#f8fafc',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: '0.375rem',
+                                  padding: '0.75rem',
+                                  marginBottom: '0.5rem',
+                                }}>
+                                  <div style={{display: 'flex', alignItems: 'flex-start', gap: '0.75rem'}}>
+                                    {/* Checkbox */}
+                                    <input
+                                      type="checkbox"
+                                      id={selectionKey}
+                                      checked={isSelected}
+                                      onChange={() => toggleMitigationSelection(pathId, step.step_number, mitigation.mitigation_id)}
+                                      style={{marginTop: '0.25rem'}}
+                                    />
+
+                                    {/* Mitigation Content */}
+                                    <div style={{flex: 1}}>
+                                      {/* Title Row */}
+                                      <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap'}}>
+                                        <strong style={{fontSize: '0.875rem'}}>{mitigation.mitigation_id}</strong>
+                                        <span style={{fontSize: '0.875rem'}}>{mitigation.mitigation_name}</span>
+                                        {mitigation.priority && (
+                                          <span style={{
+                                            padding: '0.125rem 0.5rem',
+                                            borderRadius: '0.25rem',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 600,
+                                            textTransform: 'uppercase',
+                                            background: priorityColor.bg,
+                                            color: priorityColor.text,
+                                          }}>
+                                            {mitigation.priority}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Description */}
+                                      <p style={{fontSize: '0.8125rem', color: '#475569', marginBottom: '0.5rem'}}>
+                                        {mitigation.description}
+                                      </p>
+
+                                      {/* AWS Action */}
+                                      {mitigation.aws_service_action && (
+                                        <div style={{
+                                          background: '#1e293b',
+                                          color: '#e2e8f0',
+                                          padding: '0.5rem',
+                                          borderRadius: '0.25rem',
+                                          fontSize: '0.8125rem',
+                                          fontFamily: 'monospace',
+                                          marginBottom: '0.5rem',
+                                        }}>
+                                          <strong style={{color: '#fbbf24'}}>AWS Action:</strong> {mitigation.aws_service_action}
+                                        </div>
+                                      )}
+
+                                      {/* Implementation Details */}
+                                      <div style={{display: 'flex', gap: '1rem', fontSize: '0.75rem', color: '#64748b', flexWrap: 'wrap'}}>
+                                        {mitigation.implementation_effort && (
+                                          <span>⏱️ {mitigation.implementation_effort}</span>
+                                        )}
+                                        {mitigation.effectiveness && (
+                                          <span>📊 {mitigation.effectiveness}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Helper function for single mitigation (backward compatibility)
+                            function renderSingleMitigation(mitigation, step, pathId) {
+                              const selectionKey = `${pathId}:${step.step_number}:${mitigation.mitigation_id}`;
+                              const isSelected = selectedMitigations[selectionKey] || false;
+
+                              return (
+                                <div style={{
+                                  background: '#f8fafc',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: '0.375rem',
+                                  padding: '0.75rem',
+                                }}>
+                                  <div style={{display: 'flex', alignItems: 'flex-start', gap: '0.75rem'}}>
+                                    <input
+                                      type="checkbox"
+                                      id={selectionKey}
+                                      checked={isSelected}
+                                      onChange={() => toggleMitigationSelection(pathId, step.step_number, mitigation.mitigation_id)}
+                                      style={{marginTop: '0.25rem'}}
+                                    />
+                                    <div style={{flex: 1}}>
+                                      <div style={{marginBottom: '0.5rem'}}>
+                                        <strong>{mitigation.mitigation_id}</strong> - {mitigation.mitigation_name}
+                                      </div>
+                                      <p style={{fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem'}}>
+                                        {mitigation.description}
+                                      </p>
+                                      {mitigation.aws_service_action && (
+                                        <div style={{
+                                          background: '#1e293b',
+                                          color: '#e2e8f0',
+                                          padding: '0.5rem',
+                                          borderRadius: '0.25rem',
+                                          fontSize: '0.8125rem',
+                                          fontFamily: 'monospace',
+                                        }}>
+                                          <strong style={{color: '#fbbf24'}}>AWS Action:</strong> {mitigation.aws_service_action}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Provenance Footer (Collapsed by default) */}
+                  <details className="provenance-section">
+                    <summary className="provenance-toggle">
+                      <span>View Evaluation Details & Provenance</span>
+                    </summary>
+
+                    <div className="provenance-content">
+                      {/* Validation Notes */}
+                      {path.validation_notes && (
+                        <div className="provenance-item">
+                          <h6>Validation Notes</h6>
+                          <p>{path.validation_notes}</p>
+                        </div>
+                      )}
+
+                      {/* Challenge Resolution */}
+                      {path.challenged && path.challenge_resolution && (
+                        <div className="provenance-item">
+                          <h6>Challenge Resolution</h6>
+                          <p>{path.challenge_resolution}</p>
+                        </div>
+                      )}
+
+                      {/* Evaluation Scores */}
+                      {evaluation.composite_score && (
+                        <div className="provenance-item">
+                          <h6>Evaluation Scores</h6>
+                          <div className="evaluation-scores-grid">
+                            <div className="eval-score-item">
+                              <span className="eval-label">Feasibility</span>
+                              <span className="eval-value">{evaluation.feasibility_score || 0}/10</span>
+                            </div>
+                            <div className="eval-score-item">
+                              <span className="eval-label">Detection Difficulty</span>
+                              <span className="eval-value">{evaluation.detection_score || 0}/10</span>
+                            </div>
+                            <div className="eval-score-item">
+                              <span className="eval-label">Impact</span>
+                              <span className="eval-value">{evaluation.impact_score || 0}/10</span>
+                            </div>
+                            <div className="eval-score-item">
+                              <span className="eval-label">Novelty</span>
+                              <span className="eval-value">{evaluation.novelty_score || 0}/10</span>
+                            </div>
+                            <div className="eval-score-item">
+                              <span className="eval-label">Coherence</span>
+                              <span className="eval-value">{evaluation.coherence_score || 0}/10</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                </div>
+              );
+            })}
+
+            {/* Apply Mitigations Action Bar */}
+            <div className="mitigation-action-bar">
+              <div className="mitigation-action-info">
+                <span className="mitigation-count">
+                  {Object.values(selectedMitigations).filter(Boolean).length} mitigation(s) selected
+                </span>
+              </div>
+              <div className="mitigation-action-buttons">
+                <button
+                  className="btn btn-secondary"
+                  onClick={clearAllMitigations}
+                  disabled={Object.values(selectedMitigations).filter(Boolean).length === 0}
+                >
+                  Clear Selections
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={applyMitigations}
+                  disabled={analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0}
+                >
+                  {analyzingMitigations ? 'Analyzing...' : 'Apply Mitigations & Analyze'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Post-Mitigation Analysis Section */}
+      {postMitigationAnalysis && (
+        <div className="results-container post-mitigation-container">
+          <div className="results-header">
+            <div>
+              <h2>Post-Mitigation Analysis</h2>
+              <p>Impact of selected mitigations on attack paths</p>
+            </div>
+            <div className="view-mode-toggle">
+              <button
+                className={`btn btn-sm ${viewMode === 'pre' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setViewMode('pre')}
+              >
+                Pre-Mitigation
+              </button>
+              <button
+                className={`btn btn-sm ${viewMode === 'comparison' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setViewMode('comparison')}
+              >
+                Comparison View
+              </button>
+            </div>
+          </div>
+
+          {/* Residual Risk Summary */}
+          <div className="residual-risk-summary">
+            <h3>
+              <TrendingDown size={20} />
+              Residual Risk Assessment
+            </h3>
+            <div className="risk-stats-grid">
+              <div className="risk-stat-card neutralized">
+                <div className="risk-stat-value">{postMitigationAnalysis.residual_risk.paths_neutralized}</div>
+                <div className="risk-stat-label">Paths Neutralized</div>
+              </div>
+              <div className="risk-stat-card reduced">
+                <div className="risk-stat-value">{postMitigationAnalysis.residual_risk.paths_significantly_reduced}</div>
+                <div className="risk-stat-label">Significantly Reduced</div>
+              </div>
+              <div className="risk-stat-card partial">
+                <div className="risk-stat-value">{postMitigationAnalysis.residual_risk.paths_partially_mitigated}</div>
+                <div className="risk-stat-label">Partially Mitigated</div>
+              </div>
+              <div className="risk-stat-card viable">
+                <div className="risk-stat-value">{postMitigationAnalysis.residual_risk.paths_still_viable}</div>
+                <div className="risk-stat-label">Still Viable</div>
+              </div>
+            </div>
+
+            <div className="risk-reduction-banner">
+              <div className="risk-reduction-value">
+                {postMitigationAnalysis.residual_risk.risk_reduction_percentage.toFixed(1)}%
+              </div>
+              <div className="risk-reduction-label">Overall Risk Reduction</div>
+            </div>
+
+            <div className="risk-scores">
+              <div className="risk-score-item">
+                <span className="label">Original Mean Risk:</span>
+                <span className="value">
+                  {(postMitigationAnalysis.residual_risk.mean_residual_risk_score /
+                    (1 - postMitigationAnalysis.residual_risk.risk_reduction_percentage / 100)).toFixed(2)}/10
+                </span>
+              </div>
+              <div className="risk-score-item">
+                <span className="label">Residual Mean Risk:</span>
+                <span className="value">{postMitigationAnalysis.residual_risk.mean_residual_risk_score.toFixed(2)}/10</span>
+              </div>
+              <div className="risk-score-item">
+                <span className="label">Highest Residual Risk:</span>
+                <span className="value">{postMitigationAnalysis.residual_risk.highest_residual_risk_score.toFixed(2)}/10</span>
+              </div>
+            </div>
+
+            {/* Top Residual Risks */}
+            {postMitigationAnalysis.residual_risk.top_residual_risks.length > 0 && (
+              <div className="top-residual-risks">
+                <h4><AlertTriangle size={18} /> Top Residual Risks</h4>
+                <div className="residual-risk-list">
+                  {postMitigationAnalysis.residual_risk.top_residual_risks.map((risk, idx) => (
+                    <div key={idx} className="residual-risk-item">
+                      <div className="residual-risk-rank">#{idx + 1}</div>
+                      <div className="residual-risk-details">
+                        <div className="residual-risk-name">{risk.path_name}</div>
+                        <div className="residual-risk-meta">
+                          <span className={`risk-status-badge ${risk.path_status}`}>
+                            {risk.path_status.replace(/_/g, ' ')}
+                          </span>
+                          <span>{risk.steps_remaining} active step(s)</span>
+                          <span className="residual-risk-score">{risk.residual_risk_score.toFixed(1)}/10</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recommendations */}
+            <div className="recommendations-section">
+              <h4><Shield size={18} /> Recommendations</h4>
+              <ul className="recommendations-list">
+                {postMitigationAnalysis.residual_risk.recommendations.map((rec, idx) => (
+                  <li key={idx}>{rec}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Side-by-Side Comparison View */}
+          {viewMode === 'comparison' && (
+            <div className="comparison-view">
+              <h3>Attack Path Comparison</h3>
+              {result.final_paths.map((prePath, pathIdx) => {
+                const postPath = postMitigationAnalysis.post_mitigation_paths.find(
+                  p => p.path_id === prePath.id
+                );
+                if (!postPath) return null;
+
+                return (
+                  <div key={pathIdx} className="comparison-card">
+                    <div className="comparison-header">
+                      <h4>{prePath.name}</h4>
+                      <div className="comparison-status">
+                        <span className={`status-badge ${postPath.path_status}`}>
+                          {postPath.path_status.replace(/_/g, ' ').toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="comparison-body">
+                      {/* Pre-Mitigation Column */}
+                      <div className="comparison-column pre-mitigation">
+                        <div className="column-header">
+                          <h5>Pre-Mitigation</h5>
+                          <span className="difficulty-badge">{prePath.difficulty}</span>
+                        </div>
+                        <div className="steps-list">
+                          {prePath.steps.map((step, stepIdx) => {
+                            const stepImpact = postPath.step_impacts.find(
+                              si => si.step_number === step.step_number
+                            );
+                            const status = stepImpact?.post_mitigation_status || 'active';
+
+                            return (
+                              <div key={stepIdx} className={`step-comparison-item status-${status}`}>
+                                <div className="step-header">
+                                  <span className="step-badge">Step {step.step_number}</span>
+                                  <span className="technique-badge-small">{step.technique_id}</span>
+                                </div>
+                                <div className="step-name">{step.technique_name}</div>
+                                <div className="step-phase">{step.kill_chain_phase}</div>
+                                {status === 'blocked' && (
+                                  <div className="step-status-indicator blocked">
+                                    <X size={16} /> BLOCKED
+                                  </div>
+                                )}
+                                {status === 'reduced' && (
+                                  <div className="step-status-indicator reduced">
+                                    <AlertTriangle size={16} /> REDUCED
+                                  </div>
+                                )}
+                                {status === 'active' && (
+                                  <div className="step-status-indicator active">
+                                    <CheckCircle size={16} /> ACTIVE
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="score-display">
+                          Risk Score: <strong>{prePath.composite_score?.toFixed(1) || 'N/A'}/10</strong>
+                        </div>
+                      </div>
+
+                      {/* Post-Mitigation Column */}
+                      <div className="comparison-column post-mitigation">
+                        <div className="column-header">
+                          <h5>Post-Mitigation</h5>
+                          <span className={`difficulty-badge ${postPath.path_status}`}>
+                            {postPath.post_mitigation_difficulty}
+                          </span>
+                        </div>
+                        <div className="impact-summary">
+                          <div className="impact-stat">
+                            <X className="icon blocked" size={16} />
+                            <span>{postPath.steps_blocked} blocked</span>
+                          </div>
+                          <div className="impact-stat">
+                            <AlertTriangle className="icon reduced" size={16} />
+                            <span>{postPath.steps_reduced} reduced</span>
+                          </div>
+                          <div className="impact-stat">
+                            <CheckCircle className="icon active" size={16} />
+                            <span>{postPath.steps_remaining} active</span>
+                          </div>
+                        </div>
+                        <div className="steps-list">
+                          {postPath.step_impacts.map((stepImpact, stepIdx) => (
+                            <div key={stepIdx} className={`step-impact-item ${stepImpact.post_mitigation_status}`}>
+                              <div className="step-impact-header">
+                                <span className="step-badge">Step {stepImpact.step_number}</span>
+                                <span className={`effectiveness-badge ${stepImpact.effectiveness}`}>
+                                  {stepImpact.effectiveness} effectiveness
+                                </span>
+                              </div>
+                              <div className="step-impact-reasoning">{stepImpact.reasoning}</div>
+                              {stepImpact.applied_mitigations.length > 0 && (
+                                <div className="applied-mitigations">
+                                  <Shield size={14} />
+                                  {stepImpact.applied_mitigations.length} mitigation(s) applied
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="score-display residual">
+                          Residual Risk: <strong>{postPath.residual_risk_score.toFixed(1)}/10</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+        </div> {/* Close main-content */}
+      </div> {/* Close page-content-with-sidebar */}
+
+      {/* Landing State - Show when no file has been uploaded */}
+      {!result && !running && !selectedFile && (
+        <div className="landing-state">
+          <div className="landing-card">
+            <Upload size={48} className="landing-icon" />
+            <h3>Welcome to Swarm Threat Modeling</h3>
+            <p className="landing-description">
+              Upload your Infrastructure-as-Code file to begin AI-powered threat analysis.
+              Our multi-agent system will explore, evaluate, and validate attack paths against your infrastructure.
+            </p>
+
+            <div className="landing-steps">
+              <div className="landing-step">
+                <div className="step-number">1</div>
+                <div className="step-content">
+                  <h4>Upload IaC File</h4>
+                  <p>Upload a Terraform (.tf) or CloudFormation (.yaml/.json) file describing your AWS infrastructure</p>
+                </div>
+              </div>
+
+              <div className="landing-step">
+                <div className="step-number">2</div>
+                <div className="step-content">
+                  <h4>Choose Analysis Mode</h4>
+                  <p>Run full swarm (all agents, ~10min) for comprehensive analysis, quick mode (2 agents, ~5min) for rapid testing, or single agent test (1 agent, ~3-5min) for focused analysis</p>
+                </div>
+              </div>
+
+              <div className="landing-step">
+                <div className="step-number">3</div>
+                <div className="step-content">
+                  <h4>Review Results</h4>
+                  <p>Explore validated attack paths with scores, MITRE ATT&CK mappings, and actionable mitigations</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="landing-requirements">
+              <h4>Requirements:</h4>
+              <ul>
+                <li>File must be &lt; 1MB</li>
+                <li>Supported formats: .tf, .yaml, .yml, .json</li>
+                <li>LLM provider must be configured (check backend status)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default ThreatModelPage;

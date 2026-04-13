@@ -1,0 +1,41 @@
+[
+  {
+    "run_id": "run_20260413_035449_3e3d80ec",
+    "name": "TM Swarm Run - ecommerce-platform - 2026-04-13 03:54",
+    "created_at": "2026-04-13T03:54:49.582341Z",
+    "updated_at": null,
+    "file_name": "ecommerce-platform.tf",
+    "file_type": ".tf",
+    "mode": "quick",
+    "agent_name": null,
+    "execution_time_seconds": 898.5,
+    "paths_count": 2,
+    "model_used": null
+  },
+  {
+    "run_id": "run_20260413_020838_ddda2035",
+    "name": "TM Swarm Run - ecommerce-platform - 2026-04-13 02:08",
+    "created_at": "2026-04-13T02:08:38.252337Z",
+    "updated_at": null,
+    "file_name": "ecommerce-platform.tf",
+    "file_type": ".tf",
+    "mode": "quick",
+    "agent_name": null,
+    "execution_time_seconds": 170.49,
+    "paths_count": 5,
+    "model_used": null
+  },
+  {
+    "run_id": "run_20260412_152736_c16e8236",
+    "name": "TM Swarm Run - ecommerce-platform - 2026-04-12 15:27",
+    "created_at": "2026-04-12T15:27:36.124899Z",
+    "updated_at": null,
+    "file_name": "ecommerce-platform.tf",
+    "file_type": ".tf",
+    "mode": "quick",
+    "agent_name": null,
+    "execution_time_seconds": 1134.55,
+    "paths_count": 4,
+    "model_used": null
+  }
+]

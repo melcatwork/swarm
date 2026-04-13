@@ -1,0 +1,1242 @@
+{
+  "metadata": {
+    "run_id": "run_20260413_020838_ddda2035",
+    "name": "TM Swarm Run - ecommerce-platform - 2026-04-13 02:08",
+    "created_at": "2026-04-13T02:08:38.252337Z",
+    "updated_at": null,
+    "file_name": "ecommerce-platform.tf",
+    "file_type": ".tf",
+    "mode": "quick",
+    "agent_name": null,
+    "execution_time_seconds": 170.49,
+    "paths_count": 5,
+    "model_used": null
+  },
+  "result": {
+    "status": "ok",
+    "asset_graph": {
+      "assets": [
+        {
+          "id": "aws_vpc.ecommerce_vpc",
+          "name": "ecommerce_vpc",
+          "type": "network.vpc",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {},
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_subnet.public_subnet_1",
+          "name": "public_subnet_1",
+          "type": "network.subnet",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_subnet.public_subnet_2",
+          "name": "public_subnet_2",
+          "type": "network.subnet",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_subnet.private_subnet_1",
+          "name": "private_subnet_1",
+          "type": "network.subnet",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_subnet.private_subnet_2",
+          "name": "private_subnet_2",
+          "type": "network.subnet",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_internet_gateway.ecommerce_igw",
+          "name": "ecommerce_igw",
+          "type": "network.gateway",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_route_table.public_rt",
+          "name": "public_rt",
+          "type": "network.route_table",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_route_table_association.public_rta_1",
+          "name": "public_rta_1",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_route_table_association",
+          "properties": {
+            "subnet": "aws_subnet.public_subnet_1"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_route_table_association.public_rta_2",
+          "name": "public_rta_2",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_route_table_association",
+          "properties": {
+            "subnet": "aws_subnet.public_subnet_2"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_security_group.web_sg",
+          "name": "web_sg",
+          "type": "network.security_group",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "ports": [
+              80,
+              443,
+              22
+            ],
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_security_group.database_sg",
+          "name": "database_sg",
+          "type": "network.security_group",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "ports": [
+              5432
+            ],
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_role.developer_role",
+          "name": "developer_role",
+          "type": "identity.iam_role",
+          "cloud": "aws",
+          "service": "IAM",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "management"
+        },
+        {
+          "id": "aws_iam_role_policy.developer_s3_policy",
+          "name": "developer_s3_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_role_policy",
+          "properties": {
+            "iam_role": "aws_iam_role.developer_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_role_policy.developer_secrets_policy",
+          "name": "developer_secrets_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_role_policy",
+          "properties": {
+            "iam_role": "aws_iam_role.developer_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_role.app_server_role",
+          "name": "app_server_role",
+          "type": "identity.iam_role",
+          "cloud": "aws",
+          "service": "IAM",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "management"
+        },
+        {
+          "id": "aws_iam_role_policy.app_server_rds_policy",
+          "name": "app_server_rds_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_role_policy",
+          "properties": {
+            "iam_role": "aws_iam_role.app_server_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_instance_profile.developer_profile",
+          "name": "developer_profile",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_instance_profile",
+          "properties": {
+            "iam_role": "aws_iam_role.developer_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_instance_profile.app_server_profile",
+          "name": "app_server_profile",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_instance_profile",
+          "properties": {
+            "iam_role": "aws_iam_role.app_server_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket.customer_data",
+          "name": "customer_data",
+          "type": "storage.object",
+          "cloud": "aws",
+          "service": "S3",
+          "properties": {
+            "public": false
+          },
+          "data_sensitivity": "high",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket_versioning.customer_data_versioning",
+          "name": "customer_data_versioning",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_s3_bucket_versioning",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket_policy.customer_data_policy",
+          "name": "customer_data_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_s3_bucket_policy",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket.product_images",
+          "name": "product_images",
+          "type": "storage.object",
+          "cloud": "aws",
+          "service": "S3",
+          "properties": {
+            "public": false
+          },
+          "data_sensitivity": "high",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket_public_access_block.product_images_public",
+          "name": "product_images_public",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_s3_bucket_public_access_block",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket.order_exports",
+          "name": "order_exports",
+          "type": "storage.object",
+          "cloud": "aws",
+          "service": "S3",
+          "properties": {
+            "public": false
+          },
+          "data_sensitivity": "high",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_db_subnet_group.ecommerce_db_subnet",
+          "name": "ecommerce_db_subnet",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_db_subnet_group",
+          "properties": {
+            "subnet": "aws_subnet.private_subnet_1"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_db_instance.ecommerce_db",
+          "name": "ecommerce_db",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_db_instance",
+          "properties": {
+            "security_groups": [
+              "aws_security_group.database_sg"
+            ],
+            "engine": "postgres",
+            "allocated_storage": 100,
+            "publicly_accessible": false
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_instance.web_server_1",
+          "name": "web_server_1",
+          "type": "compute.vm",
+          "cloud": "aws",
+          "service": "EC2",
+          "properties": {
+            "iam_role": "aws_iam_instance_profile.app_server_profile",
+            "subnet": "aws_subnet.public_subnet_1",
+            "security_groups": [
+              "aws_security_group.web_sg"
+            ],
+            "instance_type": "t3.medium"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_instance.developer_workstation",
+          "name": "developer_workstation",
+          "type": "compute.vm",
+          "cloud": "aws",
+          "service": "EC2",
+          "properties": {
+            "iam_role": "aws_iam_instance_profile.developer_profile",
+            "subnet": "aws_subnet.public_subnet_1",
+            "security_groups": [
+              "aws_security_group.web_sg"
+            ],
+            "instance_type": "t3.large"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_iam_role.order_processor_lambda_role",
+          "name": "order_processor_lambda_role",
+          "type": "identity.iam_role",
+          "cloud": "aws",
+          "service": "IAM",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "management"
+        },
+        {
+          "id": "aws_iam_role_policy.lambda_excessive_policy",
+          "name": "lambda_excessive_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_role_policy",
+          "properties": {
+            "iam_role": "aws_iam_role.order_processor_lambda_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_lambda_function.order_processor",
+          "name": "order_processor",
+          "type": "compute.serverless",
+          "cloud": "aws",
+          "service": "Lambda",
+          "properties": {
+            "iam_role": "aws_iam_role.order_processor_lambda_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_secretsmanager_secret.payment_gateway",
+          "name": "payment_gateway",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_secretsmanager_secret",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_secretsmanager_secret_version.payment_gateway_version",
+          "name": "payment_gateway_version",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_secretsmanager_secret_version",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_cloudwatch_log_group.application_logs",
+          "name": "application_logs",
+          "type": "monitoring.logs",
+          "cloud": "aws",
+          "service": "CloudWatch",
+          "properties": {},
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_sns_topic.order_notifications",
+          "name": "order_notifications",
+          "type": "messaging.topic",
+          "cloud": "aws",
+          "service": "SNS",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "aws_subnet.public_subnet_1",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_subnet.public_subnet_2",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_subnet.private_subnet_1",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_subnet.private_subnet_2",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_internet_gateway.ecommerce_igw",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_route_table.public_rt",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_route_table_association.public_rta_1",
+          "target": "aws_subnet.public_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_route_table_association.public_rta_2",
+          "target": "aws_subnet.public_subnet_2",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_security_group.web_sg",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_security_group.database_sg",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_iam_role_policy.developer_s3_policy",
+          "target": "aws_iam_role.developer_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_iam_role_policy.developer_secrets_policy",
+          "target": "aws_iam_role.developer_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_iam_role_policy.app_server_rds_policy",
+          "target": "aws_iam_role.app_server_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_iam_instance_profile.developer_profile",
+          "target": "aws_iam_role.developer_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_iam_instance_profile.app_server_profile",
+          "target": "aws_iam_role.app_server_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_db_subnet_group.ecommerce_db_subnet",
+          "target": "aws_subnet.private_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_db_subnet_group.ecommerce_db_subnet",
+          "target": "aws_subnet.private_subnet_2",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_db_instance.ecommerce_db",
+          "target": "aws_security_group.database_sg",
+          "type": "network_access",
+          "properties": {
+            "type": "security_group"
+          }
+        },
+        {
+          "source": "aws_instance.web_server_1",
+          "target": "aws_subnet.public_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_instance.web_server_1",
+          "target": "aws_security_group.web_sg",
+          "type": "network_access",
+          "properties": {
+            "type": "security_group"
+          }
+        },
+        {
+          "source": "aws_instance.web_server_1",
+          "target": "aws_iam_instance_profile.app_server_profile",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "iam_instance_profile"
+          }
+        },
+        {
+          "source": "aws_instance.developer_workstation",
+          "target": "aws_subnet.public_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_instance.developer_workstation",
+          "target": "aws_security_group.web_sg",
+          "type": "network_access",
+          "properties": {
+            "type": "security_group"
+          }
+        },
+        {
+          "source": "aws_instance.developer_workstation",
+          "target": "aws_iam_instance_profile.developer_profile",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "iam_instance_profile"
+          }
+        },
+        {
+          "source": "aws_iam_role_policy.lambda_excessive_policy",
+          "target": "aws_iam_role.order_processor_lambda_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_lambda_function.order_processor",
+          "target": "aws_iam_role.order_processor_lambda_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_lambda_function.order_processor",
+          "target": "aws_subnet.private_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        }
+      ],
+      "trust_boundaries": [
+        {
+          "id": "boundary_vpc-internal",
+          "name": "VPC Internal",
+          "assets": [
+            "aws_route_table_association.public_rta_1",
+            "aws_route_table_association.public_rta_2",
+            "aws_db_subnet_group.ecommerce_db_subnet",
+            "aws_instance.web_server_1",
+            "aws_instance.developer_workstation"
+          ],
+          "exposure": "vpc-internal"
+        },
+        {
+          "id": "boundary_private",
+          "name": "Private Network",
+          "assets": [
+            "aws_vpc.ecommerce_vpc",
+            "aws_subnet.public_subnet_1",
+            "aws_subnet.public_subnet_2",
+            "aws_subnet.private_subnet_1",
+            "aws_subnet.private_subnet_2",
+            "aws_internet_gateway.ecommerce_igw",
+            "aws_route_table.public_rt",
+            "aws_security_group.web_sg",
+            "aws_security_group.database_sg",
+            "aws_iam_role_policy.developer_s3_policy",
+            "aws_iam_role_policy.developer_secrets_policy",
+            "aws_iam_role_policy.app_server_rds_policy",
+            "aws_iam_instance_profile.developer_profile",
+            "aws_iam_instance_profile.app_server_profile",
+            "aws_s3_bucket.customer_data",
+            "aws_s3_bucket_versioning.customer_data_versioning",
+            "aws_s3_bucket_policy.customer_data_policy",
+            "aws_s3_bucket.product_images",
+            "aws_s3_bucket_public_access_block.product_images_public",
+            "aws_s3_bucket.order_exports",
+            "aws_db_instance.ecommerce_db",
+            "aws_iam_role_policy.lambda_excessive_policy",
+            "aws_lambda_function.order_processor",
+            "aws_secretsmanager_secret.payment_gateway",
+            "aws_secretsmanager_secret_version.payment_gateway_version",
+            "aws_cloudwatch_log_group.application_logs",
+            "aws_sns_topic.order_notifications"
+          ],
+          "exposure": "private"
+        },
+        {
+          "id": "boundary_management",
+          "name": "Management Plane",
+          "assets": [
+            "aws_iam_role.developer_role",
+            "aws_iam_role.app_server_role",
+            "aws_iam_role.order_processor_lambda_role"
+          ],
+          "exposure": "management"
+        }
+      ],
+      "metadata": {
+        "source_file": "terraform",
+        "format": "hcl2",
+        "parsed_at": "2026-04-13T02:05:47.813032+00:00",
+        "resource_count": 35
+      }
+    },
+    "exploration_summary": {
+      "agents_used": 2,
+      "raw_paths_found": 5,
+      "execution_time_seconds": 52.36,
+      "threat_intel_items": 0
+    },
+    "evaluation_summary": {
+      "paths_scored": 5,
+      "highest_score": 5.0,
+      "lowest_score": 5.0,
+      "mean_score": 5.0,
+      "execution_time_seconds": 63.96
+    },
+    "adversarial_summary": {
+      "paths_challenged": 0,
+      "paths_added": 0,
+      "coverage_estimate": "Unknown",
+      "paths_fully_valid": 0,
+      "paths_partially_valid": 0,
+      "paths_invalid": 0,
+      "execution_time_seconds": 50.6
+    },
+    "final_paths": [
+      {
+        "name": "Lateral Movement via Compromised Web Service Credentials",
+        "steps": [
+          {
+            "step_number": 1,
+            "kill_chain_phase": "Initial Access",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Initial compromise via a potentially vulnerable endpoint or credential theft targeting application access.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 2,
+            "kill_chain_phase": "Execution & Persistence",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Using compromised credentials to interact with the core business logic service.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 3,
+            "kill_chain_phase": "Lateral Movement & Privilege Escalation",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Accessing sensitive customer data stored in the database.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 4,
+            "kill_chain_phase": "Objective (Exfiltration/Impact)",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Exfiltrating sensitive data outside the secured perimeter.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          }
+        ],
+        "mitigations": [
+          "Implement least privilege access for all service roles (IAM).",
+          "Utilize secrets management services (AWS Secrets Manager) instead of hardcoding credentials.",
+          "Enforce strong network segmentation and egress filtering on all application endpoints."
+        ],
+        "attack_path": "Web Application -> Internal Service API -> Database -> External Sink",
+        "objective": "",
+        "threat_actor": "Unknown",
+        "impact_type": "confidentiality",
+        "difficulty": "medium",
+        "evaluation": {
+          "feasibility_score": 5,
+          "feasibility_justification": "",
+          "detection_score": 5,
+          "detection_justification": "",
+          "impact_score": 5,
+          "impact_justification": "",
+          "novelty_score": 5,
+          "novelty_justification": "",
+          "coherence_score": 5,
+          "coherence_justification": "",
+          "coherence_issues": [],
+          "composite_score": 5.0
+        }
+      },
+      {
+        "name": "Privilege Escalation via Misconfigured Infrastructure Access",
+        "steps": [
+          {
+            "step_number": 1,
+            "kill_chain_phase": "Initial Access",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Gaining initial foothold on a non-critical, accessible system.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 2,
+            "kill_chain_phase": "Execution & Persistence",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Enumerating local and cloud credentials available on the compromised machine.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 3,
+            "kill_chain_phase": "Lateral Movement & Privilege Escalation",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Leveraging temporary credentials to assume a higher-privileged role.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 4,
+            "kill_chain_phase": "Objective (Exfiltration/Impact)",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Modifying infrastructure configuration to maintain persistence or disable monitoring.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          }
+        ],
+        "mitigations": [
+          "Implement IAM Boundary policies to limit the maximum permissions an identity can ever attain.",
+          "Use hardened OS images and regular patch management.",
+          "Monitor and alert on changes to Security Groups and IAM policies in real-time."
+        ],
+        "attack_path": "Compromised Instance -> Metadata Service -> Overly Permissive IAM Role -> Infrastructure Modification",
+        "objective": "",
+        "threat_actor": "Unknown",
+        "impact_type": "confidentiality",
+        "difficulty": "medium",
+        "evaluation": {
+          "feasibility_score": 5,
+          "feasibility_justification": "",
+          "detection_score": 5,
+          "detection_justification": "",
+          "impact_score": 5,
+          "impact_justification": "",
+          "novelty_score": 5,
+          "novelty_justification": "",
+          "coherence_score": 5,
+          "coherence_justification": "",
+          "coherence_issues": [],
+          "composite_score": 5.0
+        }
+      },
+      {
+        "name": "Lateral Movement via Over-Privileged Role Assumption",
+        "steps": [
+          {
+            "step_number": 1,
+            "kill_chain_phase": "Initial Access",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Exploitation of an overly permissive role assigned to a low-privilege endpoint (e.g., a web server instance).",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 2,
+            "kill_chain_phase": "Execution & Persistence",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Assessing the attached IAM role permissions, specifically looking for permissions to assume high-privilege roles (e.g., 'Admin' or 'Database Owner').",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 3,
+            "kill_chain_phase": "Lateral Movement & Privilege Escalation",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Assuming the high-privilege role allowing access to sensitive data stores.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 4,
+            "kill_chain_phase": "Objective (Exfiltration/Impact)",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Exfiltrating sensitive customer records.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          }
+        ],
+        "summary": "The attack chain moves from a low-value asset (web server) to a high-value asset (database) by exploiting an overly permissive IAM role boundary, leading to the exfiltration of customer PII.",
+        "objective": "",
+        "threat_actor": "Unknown",
+        "impact_type": "confidentiality",
+        "difficulty": "medium",
+        "evaluation": {
+          "feasibility_score": 5,
+          "feasibility_justification": "",
+          "detection_score": 5,
+          "detection_justification": "",
+          "impact_score": 5,
+          "impact_justification": "",
+          "novelty_score": 5,
+          "novelty_justification": "",
+          "coherence_score": 5,
+          "coherence_justification": "",
+          "coherence_issues": [],
+          "composite_score": 5.0
+        }
+      },
+      {
+        "name": "Data Exfiltration via Cloud Storage Misconfiguration",
+        "steps": [
+          {
+            "step_number": 1,
+            "kill_chain_phase": "Initial Access",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Identifying publicly readable/writable storage buckets.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 2,
+            "kill_chain_phase": "Execution & Persistence",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Accessing and downloading proprietary source code or backups.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 3,
+            "kill_chain_phase": "Lateral Movement & Privilege Escalation",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Searching for credentials within the dumped data.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 4,
+            "kill_chain_phase": "Objective (Exfiltration/Impact)",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Using discovered credentials to establish persistence.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          }
+        ],
+        "summary": "The attack leverages a classic cloud misconfiguration (public S3 bucket) to steal sensitive data and credentials, which are then used to establish persistent, undetected access to the cloud environment.",
+        "objective": "",
+        "threat_actor": "Unknown",
+        "impact_type": "confidentiality",
+        "difficulty": "medium",
+        "evaluation": {
+          "feasibility_score": 5,
+          "feasibility_justification": "",
+          "detection_score": 5,
+          "detection_justification": "",
+          "impact_score": 5,
+          "impact_justification": "",
+          "novelty_score": 5,
+          "novelty_justification": "",
+          "coherence_score": 5,
+          "coherence_justification": "",
+          "coherence_issues": [],
+          "composite_score": 5.0
+        }
+      },
+      {
+        "name": "Lateral Movement via Compromised Service Account",
+        "steps": [
+          {
+            "step_number": 1,
+            "kill_chain_phase": "Initial Access",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Compromising a service account used for automated tasks (e.g., a CI/CD pipeline service account).",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 2,
+            "kill_chain_phase": "Execution & Persistence",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Analyzing the service account's permissions.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 3,
+            "kill_chain_phase": "Lateral Movement & Privilege Escalation",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Creating a rogue user account.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          },
+          {
+            "step_number": 4,
+            "kill_chain_phase": "Objective (Exfiltration/Impact)",
+            "technique_id": "T1000",
+            "technique_name": "Unknown Technique",
+            "target_asset": "unknown_asset",
+            "action_description": "Attaching persistent, high-privilege policies.",
+            "outcome": "",
+            "mitigation": {
+              "mitigation_id": "CUSTOM-001",
+              "mitigation_name": "General Security Hardening",
+              "description": "Implement security best practices and least-privilege access controls",
+              "aws_service_action": "Review AWS security best practices and implement appropriate controls"
+            },
+            "prerequisites": "",
+            "mitigations_by_layer": null,
+            "all_mitigations": []
+          }
+        ],
+        "summary": "This attack chain focuses on compromising an automated system credential (Service Account) to elevate privileges by creating a permanent, backdoor IAM user with administrative rights, bypassing direct credential theft.",
+        "objective": "",
+        "threat_actor": "Unknown",
+        "impact_type": "confidentiality",
+        "difficulty": "medium",
+        "evaluation": {
+          "feasibility_score": 5,
+          "feasibility_justification": "",
+          "detection_score": 5,
+          "detection_justification": "",
+          "impact_score": 5,
+          "impact_justification": "",
+          "novelty_score": 5,
+          "novelty_justification": "",
+          "coherence_score": 5,
+          "coherence_justification": "",
+          "coherence_issues": [],
+          "composite_score": 5.0
+        }
+      }
+    ],
+    "executive_summary": "",
+    "execution_time_seconds": 170.49,
+    "error": null
+  }
+}

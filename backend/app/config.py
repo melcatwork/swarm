@@ -1,0 +1,201 @@
+"""Application configuration using Pydantic Settings."""
+
+from typing import Optional, Dict
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    # LLM Provider Configuration
+    LLM_PROVIDER: str = "ollama"
+
+    # AWS Bedrock (bearer token authentication)
+    AWS_BEARER_TOKEN_BEDROCK: Optional[str] = None
+    AWS_REGION_NAME: str = "us-east-1"
+    BEDROCK_MODEL: str = "bedrock/anthropic.claude-sonnet-4-20250514-v1:0"
+
+    # Direct Anthropic API (alternative)
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+
+    # Ollama (local LLM, no API key needed)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen3:14b"
+
+    # LLM Performance Configuration (model-agnostic)
+    LLM_TEMPERATURE: float = 0.5
+    LLM_MAX_TOKENS: int = 4096
+    LLM_CONTEXT_WINDOW: int = 32000
+    LLM_TIMEOUT_SECONDS: int = 600
+    LLM_RETRY_ATTEMPTS: int = 3
+
+    # Database
+    DATABASE_URL: str = "sqlite:///data/swarm_tm.db"
+
+    # CORS Configuration
+    CORS_ORIGINS: Optional[str] = None  # Comma-separated list of allowed origins
+
+    model_config = SettingsConfigDict(
+        env_file="../.env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore"
+    )
+
+    def get_llm_config(self) -> Dict[str, str]:
+        """
+        Get LLM configuration based on the selected provider.
+
+        Returns:
+            Dictionary with 'model', 'provider', and optionally 'base_url' keys
+        """
+        if self.LLM_PROVIDER == "bedrock":
+            return {
+                "model": self.BEDROCK_MODEL,
+                "provider": "bedrock",
+            }
+        elif self.LLM_PROVIDER == "ollama":
+            return {
+                "model": f"ollama/{self.OLLAMA_MODEL}",
+                "provider": "ollama",
+                "base_url": self.OLLAMA_BASE_URL,
+            }
+        else:
+            return {
+                "model": self.ANTHROPIC_MODEL,
+                "provider": "anthropic",
+            }
+
+    def is_llm_configured(self) -> bool:
+        """
+        Check if LLM is properly configured.
+
+        Returns:
+            True if LLM provider has required credentials set
+        """
+        if self.LLM_PROVIDER == "bedrock":
+            return bool(self.AWS_BEARER_TOKEN_BEDROCK)
+        elif self.LLM_PROVIDER == "anthropic":
+            return bool(self.ANTHROPIC_API_KEY)
+        elif self.LLM_PROVIDER == "ollama":
+            # Ollama doesn't need API keys, just check base_url is set
+            return bool(self.OLLAMA_BASE_URL)
+        return False
+
+    def get_available_models(self) -> Dict[str, list]:
+        """
+        Get all available models by reading .env file.
+
+        Parses .env file to find all configured models (including commented ones)
+        for each provider.
+
+        Returns:
+            Dictionary with provider keys and list of model objects
+        """
+        import os
+        import re
+        from pathlib import Path
+
+        models_by_provider = {
+            "ollama": [],
+            "bedrock": [],
+            "anthropic": []
+        }
+
+        # Find .env file
+        env_path = Path(__file__).parent.parent.parent / ".env"
+
+        if not env_path.exists():
+            # Fallback to current config values
+            if self.LLM_PROVIDER == "ollama":
+                models_by_provider["ollama"].append({
+                    "name": self.OLLAMA_MODEL,
+                    "provider": "ollama",
+                    "available": True,
+                    "is_default": True
+                })
+            elif self.LLM_PROVIDER == "bedrock":
+                models_by_provider["bedrock"].append({
+                    "name": self.BEDROCK_MODEL,
+                    "provider": "bedrock",
+                    "available": self.is_llm_configured(),
+                    "is_default": True
+                })
+            elif self.LLM_PROVIDER == "anthropic":
+                models_by_provider["anthropic"].append({
+                    "name": self.ANTHROPIC_MODEL,
+                    "provider": "anthropic",
+                    "available": self.is_llm_configured(),
+                    "is_default": True
+                })
+            return models_by_provider
+
+        # Parse .env file
+        with open(env_path, "r") as f:
+            content = f.read()
+
+        # Find Ollama models (including commented)
+        ollama_pattern = r'^\s*#?\s*OLLAMA_MODEL\s*=\s*([^\s#]+)'
+        for match in re.finditer(ollama_pattern, content, re.MULTILINE):
+            model_name = match.group(1).strip().strip('"').strip("'")
+            is_active = not match.group(0).strip().startswith("#")
+
+            models_by_provider["ollama"].append({
+                "name": model_name,
+                "provider": "ollama",
+                "available": True if is_active else None,  # None = needs verification
+                "is_default": is_active and model_name == self.OLLAMA_MODEL
+            })
+
+        # Find Bedrock models
+        bedrock_pattern = r'^\s*#?\s*BEDROCK_MODEL\s*=\s*([^\s#]+)'
+        for match in re.finditer(bedrock_pattern, content, re.MULTILINE):
+            model_name = match.group(1).strip().strip('"').strip("'")
+            is_active = not match.group(0).strip().startswith("#")
+
+            models_by_provider["bedrock"].append({
+                "name": model_name,
+                "provider": "bedrock",
+                "available": self.is_llm_configured() if is_active else False,
+                "is_default": is_active and model_name == self.BEDROCK_MODEL
+            })
+
+        # Find Anthropic models
+        anthropic_pattern = r'^\s*#?\s*ANTHROPIC_MODEL\s*=\s*([^\s#]+)'
+        for match in re.finditer(anthropic_pattern, content, re.MULTILINE):
+            model_name = match.group(1).strip().strip('"').strip("'")
+            is_active = not match.group(0).strip().startswith("#")
+
+            models_by_provider["anthropic"].append({
+                "name": model_name,
+                "provider": "anthropic",
+                "available": self.is_llm_configured() if is_active else False,
+                "is_default": is_active and model_name == self.ANTHROPIC_MODEL
+            })
+
+        # Remove duplicates
+        for provider in models_by_provider:
+            seen = set()
+            unique_models = []
+            for model in models_by_provider[provider]:
+                if model["name"] not in seen:
+                    seen.add(model["name"])
+                    unique_models.append(model)
+            models_by_provider[provider] = unique_models
+
+        return models_by_provider
+
+
+# Singleton instance
+settings = Settings()
+
+
+def get_settings() -> Settings:
+    """
+    Get the singleton settings instance.
+
+    Returns:
+        Settings instance
+    """
+    return settings

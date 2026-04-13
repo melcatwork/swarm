@@ -1,0 +1,71 @@
+# Swarm TM - Docker Compose Configuration
+# Multi-agent threat modeling system with frontend and backend services
+
+version: '3.8'
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: swarm-tm-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Load environment variables from .env file
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK}
+      - AWS_REGION_NAME=${AWS_REGION_NAME:-us-east-1}
+      - BEDROCK_MODEL=${BEDROCK_MODEL:-bedrock/anthropic.claude-sonnet-4-20250514-v1:0}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:14b}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - DATABASE_URL=sqlite:///data/swarm_tm.db
+    volumes:
+      # Persist database and STIX data
+      - backend-data:/app/data
+      # Optional: mount .env file if not using environment variables
+      # - ./.env:/app/.env:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - swarm-network
+
+  # Frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: swarm-tm-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - swarm-network
+
+volumes:
+  # Named volume for persistent backend data
+  backend-data:
+    driver: local
+
+networks:
+  # Internal network for service communication
+  swarm-network:
+    driver: bridge

@@ -1,0 +1,10 @@
+node_modules
+__pycache__
+.env
+*.db
+.venv
+dist
+
+# Development logs
+logs/
+*.pid
