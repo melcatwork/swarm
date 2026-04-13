@@ -85,7 +85,7 @@ Three agents perform red team / blue team / arbitrator review:
 #### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/redcountryroad/swarm-tm.git
 cd swarm-tm
 ```
 
@@ -477,7 +477,7 @@ Contributions welcome! Please:
 ## 📧 Support
 
 For issues and questions:
-- GitHub Issues: [Create an issue](https://github.com/yourusername/swarm-tm/issues)
+- GitHub Issues: [Create an issue](https://github.com/redcountryroad/swarm-tm/issues)
 - Documentation: This README and `/docs` endpoint
 
 ---
