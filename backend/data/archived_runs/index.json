@@ -1,5 +1,31 @@
 [
   {
+    "run_id": "run_20260414_224333_003e2321",
+    "name": "TM Swarm Run - clouddocs-saas-app - 2026-04-14 22:43",
+    "created_at": "2026-04-14T22:43:33.736857+08:00",
+    "updated_at": null,
+    "file_name": "clouddocs-saas-app.tf",
+    "file_type": ".tf",
+    "mode": "full",
+    "agent_name": null,
+    "execution_time_seconds": 932.68,
+    "paths_count": 39,
+    "model_used": "anthropic.claude-3-sonnet-20240229-v1:0"
+  },
+  {
+    "run_id": "run_20260414_214046_c6d3d895",
+    "name": "TM Swarm Run - clouddocs-saas-app - 2026-04-14 21:40",
+    "created_at": "2026-04-14T21:40:46.793908+08:00",
+    "updated_at": null,
+    "file_name": "clouddocs-saas-app.tf",
+    "file_type": ".tf",
+    "mode": "full",
+    "agent_name": null,
+    "execution_time_seconds": 420.48,
+    "paths_count": 6,
+    "model_used": "anthropic.claude-3-sonnet-20240229-v1:0"
+  },
+  {
     "run_id": "run_20260414_161900_c1596329",
     "name": "TM Swarm Run - clouddocs-saas-app - 2026-04-14 16:19",
     "created_at": "2026-04-14T16:19:00.542001+08:00",

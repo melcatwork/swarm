@@ -32,7 +32,7 @@ lazarus_group:
   display_name: Lazarus Group
   category: threat_actor
   protected: true
-  enabled: false
+  enabled: true
   role: Financial Crime and Destructive Operations Specialist
   goal: Identify attack paths targeting financial assets, cryptocurrency, payment
     systems, and data stores. Consider both theft and destructive wiper scenarios.
@@ -59,7 +59,7 @@ volt_typhoon:
   display_name: Volt Typhoon
   category: threat_actor
   protected: true
-  enabled: false
+  enabled: true
   role: Critical Infrastructure Pre-positioning Specialist
   goal: Identify attack paths that enable persistent access to network infrastructure
     and cloud management planes using living-off-the-land techniques. Minimise malware
@@ -117,7 +117,7 @@ fin7:
   display_name: FIN7
   category: threat_actor
   protected: true
-  enabled: false
+  enabled: true
   role: E-Commerce and Payment Systems Specialist
   goal: Identify attack paths targeting web applications, payment processing, PII/PCI
     data stores, and serverless functions. Focus on data exfiltration via application-layer
@@ -146,7 +146,7 @@ nation_state_apt:
   display_name: Nation-State APT (Generic)
   category: archetype
   protected: true
-  enabled: false
+  enabled: true
   role: Patient Nation-State Advanced Persistent Threat Operator
   goal: Identify attack paths assuming unlimited patience, high sophistication, and
     potential supply chain access. Explore the most complex, multi-stage attack chains
@@ -174,7 +174,7 @@ opportunistic_attacker:
   display_name: Opportunistic Attacker
   category: archetype
   protected: true
-  enabled: false
+  enabled: true
   role: Opportunistic Attacker Seeking Low-Hanging Fruit
   goal: Identify the easiest, fastest attack paths using known CVEs, default credentials,
     public misconfigurations, and common security oversights. Focus on what can be
@@ -201,7 +201,7 @@ insider_threat:
   display_name: Insider Threat
   category: archetype
   protected: true
-  enabled: false
+  enabled: true
   role: Malicious Insider with Legitimate Access
   goal: Identify attack paths starting from a position of legitimate user access within
     the organisation. Explore privilege escalation from standard employee permissions
@@ -230,7 +230,7 @@ cloud_native_attacker:
   display_name: Cloud-Native Attacker
   category: archetype
   protected: true
-  enabled: false
+  enabled: true
   role: Cloud Infrastructure and IAM Exploitation Specialist
   goal: Identify attack paths that exploit cloud-specific weaknesses - IAM misconfigurations,
     instance metadata service abuse, cross-account/cross-tenant pivots, serverless
@@ -260,7 +260,7 @@ supply_chain_attacker:
   display_name: Supply Chain Attacker
   category: archetype
   protected: true
-  enabled: false
+  enabled: true
   role: Supply Chain and CI/CD Pipeline Compromise Specialist
   goal: Identify attack paths that compromise the system through its dependencies
     - third-party libraries, container base images, CI/CD pipelines, infrastructure-as-code
@@ -290,7 +290,7 @@ social_engineering_hybrid:
   display_name: Social Engineering Hybrid
   category: archetype
   protected: true
-  enabled: false
+  enabled: true
   role: Social Engineering and Phished Credential Specialist
   goal: Identify attack paths that begin from compromised employee credentials obtained
     through phishing, vishing, or social engineering. Map the blast radius from a
@@ -319,7 +319,7 @@ lateral_movement_specialist:
   display_name: Lateral Movement Specialist
   category: archetype
   protected: true
-  enabled: false
+  enabled: true
   role: Post-Compromise Lateral Movement Mapper
   goal: Given a foothold on ANY single asset in the infrastructure, map all reachable
     assets, all possible pivot paths, and all escalation routes. Produce a comprehensive
@@ -350,7 +350,7 @@ data_exfiltration_optimizer:
   display_name: Data Exfiltration Optimizer
   category: archetype
   protected: true
-  enabled: false
+  enabled: true
   role: Crown Jewel Data Exfiltration Path Optimizer
   goal: Work BACKWARD from the most valuable data assets (databases, S3 buckets with
     sensitive data, secrets stores) and identify the shortest, stealthiest paths an
