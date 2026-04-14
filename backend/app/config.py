@@ -10,14 +10,14 @@ class Settings(BaseSettings):
     # LLM Provider Configuration
     LLM_PROVIDER: str = "ollama"
 
-    # AWS Bedrock (bearer token authentication)
+    # AWS Bedrock (bearer token authentication for Anthropic models)
     AWS_BEARER_TOKEN_BEDROCK: Optional[str] = None
-    AWS_REGION_NAME: str = "us-east-1"
-    BEDROCK_MODEL: str = "bedrock/anthropic.claude-sonnet-4-20250514-v1:0"
+    AWS_REGION: str = "us-east-1"
+    BEDROCK_MODEL: str = "anthropic.claude-3-sonnet-20240229-v1:0"
 
     # Direct Anthropic API (alternative)
     ANTHROPIC_API_KEY: Optional[str] = None
-    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-6"
 
     # Ollama (local LLM, no API key needed)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -185,6 +185,66 @@ class Settings(BaseSettings):
             models_by_provider[provider] = unique_models
 
         return models_by_provider
+
+    def get_bedrock_anthropic_models(self) -> list:
+        """
+        Get list of available Anthropic models on AWS Bedrock.
+
+        Returns:
+            List of Bedrock Anthropic model configurations (ACTIVE models only)
+        """
+        return [
+            {
+                "id": "anthropic.claude-3-sonnet-20240229-v1:0",
+                "name": "Claude 3 Sonnet",
+                "provider": "bedrock",
+                "description": "Balanced Claude 3 model (recommended)",
+                "context_window": 200000,
+                "max_tokens": 4096
+            },
+            {
+                "id": "anthropic.claude-3-haiku-20240307-v1:0",
+                "name": "Claude 3 Haiku",
+                "provider": "bedrock",
+                "description": "Fastest Claude 3 model",
+                "context_window": 200000,
+                "max_tokens": 4096
+            }
+        ]
+
+    def get_anthropic_api_models(self) -> list:
+        """
+        Get list of available Anthropic API models (Claude 4.5/4.6).
+
+        Returns:
+            List of Anthropic API model configurations
+        """
+        return [
+            {
+                "id": "claude-opus-4-6",
+                "name": "Claude Opus 4.6",
+                "provider": "anthropic",
+                "description": "Most powerful Claude model (2025)",
+                "context_window": 200000,
+                "max_tokens": 8192
+            },
+            {
+                "id": "claude-sonnet-4-6",
+                "name": "Claude Sonnet 4.6",
+                "provider": "anthropic",
+                "description": "Balanced Claude 4 model (2025)",
+                "context_window": 200000,
+                "max_tokens": 8192
+            },
+            {
+                "id": "claude-haiku-4-5-20251001",
+                "name": "Claude Haiku 4.5",
+                "provider": "anthropic",
+                "description": "Fastest Claude 4 model (2025)",
+                "context_window": 200000,
+                "max_tokens": 8192
+            }
+        ]
 
 
 # Singleton instance

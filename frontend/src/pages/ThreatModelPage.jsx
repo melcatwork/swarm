@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save } from 'lucide-react';
+import axios from 'axios';
+import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save, StopCircle, Settings, Key } from 'lucide-react';
 import Toast from '../components/Toast';
-import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels } from '../api/client';
+import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels, checkHealth, cancelRun, configureBedrockCredentials } from '../api/client';
+import { formatGMT8DateShort, formatGMT8Time } from '../utils/formatters';
 import './ThreatModelPage.css';
 
 function ThreatModelPage() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [running, setRunning] = useState(false);
   const [currentPhase, setCurrentPhase] = useState(false);
+  const [currentJobId, setCurrentJobId] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
@@ -15,6 +18,8 @@ function ThreatModelPage() {
   const [personas, setPersonas] = useState({});
   const [selectedAgent, setSelectedAgent] = useState('apt29_cozy_bear');
   const [heartbeat, setHeartbeat] = useState(0);
+  const [backendAlive, setBackendAlive] = useState(true);
+  const [lastBackendCheck, setLastBackendCheck] = useState(null);
 
   // LLM model selection state
   const [availableModels, setAvailableModels] = useState([]);
@@ -31,6 +36,17 @@ function ThreatModelPage() {
   const [editingRunId, setEditingRunId] = useState(null);
   const [editingName, setEditingName] = useState('');
 
+  // Cancel token for aborting requests
+  const [cancelTokenSource, setCancelTokenSource] = useState(null);
+
+  // Bedrock configuration state
+  const [showBedrockConfig, setShowBedrockConfig] = useState(false);
+  const [bedrockConfig, setBedrockConfig] = useState({
+    aws_bearer_token: '',
+    aws_region: 'us-east-1'
+  });
+  const [configuringBedrock, setConfiguringBedrock] = useState(false);
+
   // Helper function to format execution time
   const formatExecutionTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
@@ -39,6 +55,32 @@ function ThreatModelPage() {
       return `${minutes}m ${remainingSeconds}s`;
     }
     return `${remainingSeconds}s`;
+  };
+
+  // Helper function to format elapsed time as MM:SS
+  const formatElapsedTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  // Helper function to get contextual status message based on elapsed time
+  const getContextualStatusMessage = (seconds) => {
+    if (seconds < 60) {
+      return 'Initializing threat modeling pipeline...';
+    } else if (seconds < 180) {
+      return 'Parsing infrastructure and building asset graph...';
+    } else if (seconds < 600) {
+      return 'Exploration agents analyzing attack vectors...';
+    } else if (seconds < 900) {
+      return 'Evaluation crew scoring attack paths...';
+    } else if (seconds < 1200) {
+      return 'Adversarial validation in progress...';
+    } else if (seconds < 1800) {
+      return 'Final arbitration and mitigation mapping...';
+    } else {
+      return 'Long-running operation, almost there...';
+    }
   };
 
   const handleFileSelect = (event) => {
@@ -107,17 +149,46 @@ function ThreatModelPage() {
     fetchModels();
   }, []);
 
-  // Heartbeat effect to show test is alive
+  // Heartbeat effect to show test is alive and poll backend health
   useEffect(() => {
-    let interval;
+    let heartbeatInterval;
+    let backendCheckInterval;
+
     if (running) {
-      interval = setInterval(() => {
+      // Update heartbeat counter every second
+      heartbeatInterval = setInterval(() => {
         setHeartbeat(prev => prev + 1);
       }, 1000);
+
+      // Check backend health every 10 seconds
+      backendCheckInterval = setInterval(async () => {
+        try {
+          await checkHealth();
+          setBackendAlive(true);
+          setLastBackendCheck(new Date());
+        } catch (err) {
+          console.error('Backend health check failed:', err);
+          setBackendAlive(false);
+        }
+      }, 10000);
+
+      // Initial backend check
+      checkHealth()
+        .then(() => {
+          setBackendAlive(true);
+          setLastBackendCheck(new Date());
+        })
+        .catch(() => setBackendAlive(false));
     } else {
       setHeartbeat(0);
+      setBackendAlive(true);
+      setLastBackendCheck(null);
     }
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+      clearInterval(backendCheckInterval);
+    };
   }, [running]);
 
   // Load archived runs on mount and after successful pipeline runs
@@ -219,10 +290,27 @@ function ThreatModelPage() {
       return;
     }
 
+    // Validate that selected model is not WIP
+    if (selectedModel) {
+      const modelInfo = availableModels.find(m => m.name === selectedModel);
+      if (modelInfo && modelInfo.is_wip) {
+        setError('Selected model is marked as Work In Progress and cannot be used. Please select the default model or another enabled model.');
+        setToast({
+          message: 'Cannot use Work In Progress model',
+          type: 'error'
+        });
+        return;
+      }
+    }
+
     try {
       setRunning(true);
       setError(null);
       setResult(null);
+
+      // Create cancel token for this request
+      const source = axios.CancelToken.source();
+      setCancelTokenSource(source);
 
       // Simulate phase updates (since the API is synchronous)
       const phases = [
@@ -243,11 +331,11 @@ function ThreatModelPage() {
 
       let data;
       if (mode === 'quick') {
-        data = await uploadAndRunQuick(selectedFile, selectedModel);
+        data = await uploadAndRunQuick(selectedFile, selectedModel, source.token);
       } else if (mode === 'single') {
-        data = await uploadAndRunSingleAgent(selectedFile, selectedAgent);
+        data = await uploadAndRunSingleAgent(selectedFile, selectedAgent, selectedModel, source.token);
       } else {
-        data = await uploadAndRunSwarm(selectedFile);
+        data = await uploadAndRunSwarm(selectedFile, selectedModel, source.token);
       }
 
       clearInterval(phaseInterval);
@@ -263,6 +351,13 @@ function ThreatModelPage() {
         setError(data.error || 'Failed to run threat model');
       }
     } catch (err) {
+      // Check if error was due to cancellation
+      if (axios.isCancel(err)) {
+        console.log('Request cancelled:', err.message);
+        // Don't show error toast for user-initiated cancellations
+        return;
+      }
+
       console.error('Failed to run swarm:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to run threat model');
       setToast({
@@ -272,6 +367,71 @@ function ThreatModelPage() {
     } finally {
       setRunning(false);
       setCurrentPhase('');
+      setCancelTokenSource(null);
+    }
+  };
+
+  const handleCancelRun = async () => {
+    try {
+      // Cancel the ongoing HTTP request
+      if (cancelTokenSource) {
+        cancelTokenSource.cancel('User cancelled the operation');
+      }
+
+      // Reset UI state
+      setRunning(false);
+      setCurrentPhase('');
+      setCurrentJobId(null);
+      setCancelTokenSource(null);
+
+      setToast({
+        message: 'Threat modeling operation cancelled',
+        type: 'info'
+      });
+    } catch (err) {
+      console.error('Failed to cancel run:', err);
+      setToast({
+        message: 'Error cancelling operation',
+        type: 'error'
+      });
+    }
+  };
+
+  const handleConfigureBedrock = async () => {
+    if (!bedrockConfig.aws_bearer_token) {
+      setToast({
+        message: 'Please enter your AWS Bedrock bearer token',
+        type: 'error'
+      });
+      return;
+    }
+
+    try {
+      setConfiguringBedrock(true);
+      const result = await configureBedrockCredentials(bedrockConfig);
+
+      setToast({
+        message: `AWS Bedrock configured successfully! ${result.available_models.length} models available.`,
+        type: 'success'
+      });
+
+      // Refresh available models
+      fetchAvailableModels();
+
+      // Clear form and hide
+      setBedrockConfig({
+        aws_bearer_token: '',
+        aws_region: 'us-east-1'
+      });
+      setShowBedrockConfig(false);
+    } catch (err) {
+      console.error('Failed to configure Bedrock:', err);
+      setToast({
+        message: `Failed to configure AWS Bedrock: ${err.message}`,
+        type: 'error'
+      });
+    } finally {
+      setConfiguringBedrock(false);
     }
   };
 
@@ -455,6 +615,44 @@ function ThreatModelPage() {
     return boundaries;
   };
 
+  // Calculate evaluation statistics across all paths
+  const calculateEvaluationStats = (paths) => {
+    if (!paths || paths.length === 0) return null;
+
+    const stats = {
+      feasibility: [],
+      impact: [],
+      detection: [],
+      novelty: [],
+      coherence: [],
+      composite: []
+    };
+
+    paths.forEach(path => {
+      const evaluation = path.evaluation || {};
+      if (evaluation.feasibility_score) stats.feasibility.push(evaluation.feasibility_score);
+      if (evaluation.impact_score) stats.impact.push(evaluation.impact_score);
+      if (evaluation.detection_score) stats.detection.push(evaluation.detection_score);
+      if (evaluation.novelty_score) stats.novelty.push(evaluation.novelty_score);
+      if (evaluation.coherence_score) stats.coherence.push(evaluation.coherence_score);
+      const compositeScore = evaluation.composite_score || path.composite_score;
+      if (compositeScore) stats.composite.push(compositeScore);
+    });
+
+    const average = (arr) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const max = (arr) => arr.length > 0 ? Math.max(...arr) : 0;
+    const min = (arr) => arr.length > 0 ? Math.min(...arr) : 0;
+
+    return {
+      feasibility: { avg: average(stats.feasibility), max: max(stats.feasibility), min: min(stats.feasibility) },
+      impact: { avg: average(stats.impact), max: max(stats.impact), min: min(stats.impact) },
+      detection: { avg: average(stats.detection), max: max(stats.detection), min: min(stats.detection) },
+      novelty: { avg: average(stats.novelty), max: max(stats.novelty), min: min(stats.novelty) },
+      coherence: { avg: average(stats.coherence), max: max(stats.coherence), min: min(stats.coherence) },
+      composite: { avg: average(stats.composite), max: max(stats.composite), min: min(stats.composite) }
+    };
+  };
+
   return (
     <div className="threat-model-page">
       {toast && (
@@ -533,19 +731,11 @@ function ThreatModelPage() {
                           <span className="run-mode-badge">{run.mode}</span>
                         </div>
 
-                        {/* System Time of Run */}
+                        {/* System Time of Run (GMT+8) */}
                         <div className="run-timestamp">
                           <span className="timestamp-icon">🕐</span>
                           <span className="timestamp-text">
-                            {new Date(run.created_at).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })} at {new Date(run.created_at).toLocaleTimeString('en-US', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit'
-                            })}
+                            {formatGMT8DateShort(run.created_at)} at {formatGMT8Time(run.created_at)} GMT+8
                           </span>
                         </div>
 
@@ -699,16 +889,88 @@ function ThreatModelPage() {
                 <option
                   key={`${model.provider}-${model.name}`}
                   value={model.name}
-                  disabled={!model.available}
+                  disabled={!model.available || model.is_wip}
                 >
-                  {model.display_name} {!model.available ? '(Not Available)' : model.is_default ? '(Current Default)' : ''}
+                  {model.display_name} {!model.available ? '(Not Available)' : model.is_wip ? '' : model.is_default ? '(Current Default)' : ''}
                 </option>
               ))
             )}
           </select>
           <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', marginBottom: 0 }}>
-            Choose which LLM model to use for threat modeling. Leave as default to use the model configured in .env
+            Choose which LLM model to use for threat modeling. Models marked "Work In Progress" are disabled. Leave as default to use the model configured in .env.
           </p>
+        </div>
+
+        {/* AWS Bedrock Configuration */}
+        <div className="bedrock-config-section">
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowBedrockConfig(!showBedrockConfig)}
+            disabled={running}
+            style={{ marginBottom: '1rem' }}
+          >
+            <Key size={16} />
+            {showBedrockConfig ? 'Hide' : 'Configure'} AWS Bedrock Credentials
+          </button>
+
+          {showBedrockConfig && (
+            <div className="bedrock-config-form">
+              <h4 style={{ fontSize: '1rem', marginBottom: '1rem', color: '#1a1a2e' }}>
+                AWS Bedrock Configuration
+              </h4>
+              <div className="form-group">
+                <label htmlFor="aws-bearer-token">AWS Bedrock Bearer Token</label>
+                <input
+                  id="aws-bearer-token"
+                  type="password"
+                  value={bedrockConfig.aws_bearer_token}
+                  onChange={(e) => setBedrockConfig({ ...bedrockConfig, aws_bearer_token: e.target.value })}
+                  disabled={configuringBedrock}
+                  placeholder="Enter your AWS Bedrock bearer token"
+                  className="form-input"
+                />
+                <p style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.25rem' }}>
+                  Your AWS Bedrock API bearer token for accessing Anthropic models
+                </p>
+              </div>
+              <div className="form-group">
+                <label htmlFor="aws-region">AWS Region</label>
+                <select
+                  id="aws-region"
+                  value={bedrockConfig.aws_region}
+                  onChange={(e) => setBedrockConfig({ ...bedrockConfig, aws_region: e.target.value })}
+                  disabled={configuringBedrock}
+                  className="form-input"
+                >
+                  <option value="us-east-1">US East (N. Virginia) - us-east-1</option>
+                  <option value="us-west-2">US West (Oregon) - us-west-2</option>
+                  <option value="ap-southeast-1">Asia Pacific (Singapore) - ap-southeast-1</option>
+                  <option value="ap-northeast-1">Asia Pacific (Tokyo) - ap-northeast-1</option>
+                  <option value="eu-central-1">Europe (Frankfurt) - eu-central-1</option>
+                  <option value="eu-west-1">Europe (Ireland) - eu-west-1</option>
+                </select>
+              </div>
+              <div className="form-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={handleConfigureBedrock}
+                  disabled={configuringBedrock}
+                >
+                  {configuringBedrock ? 'Configuring...' : 'Save & Apply'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowBedrockConfig(false)}
+                  disabled={configuringBedrock}
+                >
+                  Cancel
+                </button>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+                Your bearer token will be saved to .env file and used for accessing Anthropic models via AWS Bedrock.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="run-buttons">
@@ -736,6 +998,16 @@ function ThreatModelPage() {
             <User size={16} />
             Single Agent Test
           </button>
+          {running && (
+            <button
+              className="btn btn-danger"
+              onClick={handleCancelRun}
+              title="Cancel running operation"
+            >
+              <StopCircle size={16} />
+              Stop
+            </button>
+          )}
         </div>
 
         {running && (
@@ -743,12 +1015,49 @@ function ThreatModelPage() {
             <div className="progress-bar">
               <div className="progress-bar-fill"></div>
             </div>
+
+            {/* Elapsed Time Display */}
+            <div className="elapsed-time-display">
+              <div className="elapsed-time-value">{formatElapsedTime(heartbeat)}</div>
+              <div className="elapsed-time-label">Elapsed Time</div>
+            </div>
+
+            {/* Status Messages */}
             <p className="progress-text">
-              {currentPhase}
-              <span className="heartbeat-indicator">
-                {' '} Running for {heartbeat}s...
-              </span>
+              {currentPhase || getContextualStatusMessage(heartbeat)}
             </p>
+
+            {/* Heartbeat Indicators */}
+            <div className="heartbeat-indicators">
+              <div className="heartbeat-item">
+                <div className={`heartbeat-pulse ${backendAlive ? 'alive' : 'dead'}`}></div>
+                <span className="heartbeat-label">
+                  Backend: {backendAlive ? 'Responsive' : 'Not Responding'}
+                </span>
+              </div>
+              <div className="heartbeat-item">
+                <div className="heartbeat-pulse alive"></div>
+                <span className="heartbeat-label">Frontend: Active</span>
+              </div>
+              {lastBackendCheck && (
+                <div className="heartbeat-item">
+                  <span className="heartbeat-timestamp">
+                    Last check: {lastBackendCheck.toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Long Operation Warning */}
+            {heartbeat > 600 && (
+              <div className="long-operation-notice">
+                <AlertTriangle size={16} />
+                <span>
+                  Long-running operation detected. This is normal for comprehensive threat modeling with LLMs.
+                  Expected duration: {currentPhase.includes('Quick') ? '14-20 minutes' : '25-30 minutes'}.
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -849,6 +1158,270 @@ function ThreatModelPage() {
               <span className="stat-value">{Math.round(result.execution_time_seconds / 60)}m</span>
             </div>
           </div>
+
+          {/* Evaluation Summary Panel */}
+          {(() => {
+            const evalStats = calculateEvaluationStats(result.final_paths);
+            if (!evalStats) return null;
+
+            return (
+              <div className="evaluation-summary-panel">
+                <div className="evaluation-header">
+                  <div>
+                    <h3>📊 Evaluation Summary</h3>
+                    <p style={{ fontSize: '0.875rem', color: '#64748b', margin: '0.5rem 0 0 0' }}>
+                      Multi-criteria scoring across {result.final_paths.length} attack path{result.final_paths.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className="overall-score-badge">
+                    <div className="score-badge-value">{evalStats.composite.avg.toFixed(1)}</div>
+                    <div className="score-badge-label">Avg Risk Score</div>
+                  </div>
+                </div>
+
+                {/* Scoring Methodology */}
+                <div className="scoring-methodology">
+                  <h4 style={{ fontSize: '0.9375rem', marginBottom: '0.75rem', color: '#1e293b' }}>
+                    Composite Scoring Methodology
+                  </h4>
+                  <div className="methodology-grid">
+                    <div className="methodology-item">
+                      <span className="weight-badge">30%</span>
+                      <span className="methodology-label">Feasibility</span>
+                      <span className="methodology-desc">Technical likelihood of success</span>
+                    </div>
+                    <div className="methodology-item">
+                      <span className="weight-badge">25%</span>
+                      <span className="methodology-label">Impact</span>
+                      <span className="methodology-desc">Potential damage to CIA triad</span>
+                    </div>
+                    <div className="methodology-item">
+                      <span className="weight-badge">15%</span>
+                      <span className="methodology-label">Detection Difficulty</span>
+                      <span className="methodology-desc">Evasion of security controls</span>
+                    </div>
+                    <div className="methodology-item">
+                      <span className="weight-badge">15%</span>
+                      <span className="methodology-label">Novelty</span>
+                      <span className="methodology-desc">Uniqueness of attack vector</span>
+                    </div>
+                    <div className="methodology-item">
+                      <span className="weight-badge">15%</span>
+                      <span className="methodology-label">Coherence</span>
+                      <span className="methodology-desc">Logical flow and realism</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Evaluation Metrics Grid */}
+                <div className="evaluation-metrics-grid">
+                  {/* Feasibility */}
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <span className="metric-icon">🎯</span>
+                      <span className="metric-title">Feasibility</span>
+                    </div>
+                    <div className="metric-score-display">
+                      <div className="metric-main-score">{evalStats.feasibility.avg.toFixed(1)}/10</div>
+                      <div className="metric-range">
+                        <span>Range: {evalStats.feasibility.min.toFixed(1)} - {evalStats.feasibility.max.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    <div className="metric-bar">
+                      <div
+                        className="metric-bar-fill feasibility"
+                        style={{ width: `${(evalStats.feasibility.avg / 10) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Impact */}
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <span className="metric-icon">💥</span>
+                      <span className="metric-title">Impact</span>
+                    </div>
+                    <div className="metric-score-display">
+                      <div className="metric-main-score">{evalStats.impact.avg.toFixed(1)}/10</div>
+                      <div className="metric-range">
+                        <span>Range: {evalStats.impact.min.toFixed(1)} - {evalStats.impact.max.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    <div className="metric-bar">
+                      <div
+                        className="metric-bar-fill impact"
+                        style={{ width: `${(evalStats.impact.avg / 10) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Detection Difficulty */}
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <span className="metric-icon">🕵️</span>
+                      <span className="metric-title">Detection Difficulty</span>
+                    </div>
+                    <div className="metric-score-display">
+                      <div className="metric-main-score">{evalStats.detection.avg.toFixed(1)}/10</div>
+                      <div className="metric-range">
+                        <span>Range: {evalStats.detection.min.toFixed(1)} - {evalStats.detection.max.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    <div className="metric-bar">
+                      <div
+                        className="metric-bar-fill detection"
+                        style={{ width: `${(evalStats.detection.avg / 10) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Novelty */}
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <span className="metric-icon">✨</span>
+                      <span className="metric-title">Novelty</span>
+                    </div>
+                    <div className="metric-score-display">
+                      <div className="metric-main-score">{evalStats.novelty.avg.toFixed(1)}/10</div>
+                      <div className="metric-range">
+                        <span>Range: {evalStats.novelty.min.toFixed(1)} - {evalStats.novelty.max.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    <div className="metric-bar">
+                      <div
+                        className="metric-bar-fill novelty"
+                        style={{ width: `${(evalStats.novelty.avg / 10) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Coherence */}
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <span className="metric-icon">🧩</span>
+                      <span className="metric-title">Coherence</span>
+                    </div>
+                    <div className="metric-score-display">
+                      <div className="metric-main-score">{evalStats.coherence.avg.toFixed(1)}/10</div>
+                      <div className="metric-range">
+                        <span>Range: {evalStats.coherence.min.toFixed(1)} - {evalStats.coherence.max.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    <div className="metric-bar">
+                      <div
+                        className="metric-bar-fill coherence"
+                        style={{ width: `${(evalStats.coherence.avg / 10) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Composite Score */}
+                  <div className="metric-card composite">
+                    <div className="metric-header">
+                      <span className="metric-icon">📈</span>
+                      <span className="metric-title">Composite Score</span>
+                    </div>
+                    <div className="metric-score-display">
+                      <div className="metric-main-score">{evalStats.composite.avg.toFixed(1)}/10</div>
+                      <div className="metric-range">
+                        <span>Range: {evalStats.composite.min.toFixed(1)} - {evalStats.composite.max.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    <div className="metric-bar">
+                      <div
+                        className="metric-bar-fill composite"
+                        style={{ width: `${(evalStats.composite.avg / 10) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Key Findings */}
+                <div className="evaluation-findings">
+                  <h4 style={{ fontSize: '0.9375rem', marginBottom: '0.75rem', color: '#1e293b' }}>
+                    🔍 Key Findings
+                  </h4>
+                  <div className="findings-list">
+                    {evalStats.composite.avg >= 7.0 && (
+                      <div className="finding-item critical">
+                        <span className="finding-badge critical">Critical</span>
+                        <span className="finding-text">
+                          High average composite score ({evalStats.composite.avg.toFixed(1)}/10) indicates significant threat exposure
+                        </span>
+                      </div>
+                    )}
+                    {evalStats.feasibility.avg >= 7.0 && (
+                      <div className="finding-item high">
+                        <span className="finding-badge high">High</span>
+                        <span className="finding-text">
+                          Attack paths demonstrate high feasibility ({evalStats.feasibility.avg.toFixed(1)}/10) - immediate action recommended
+                        </span>
+                      </div>
+                    )}
+                    {evalStats.impact.avg >= 7.0 && (
+                      <div className="finding-item high">
+                        <span className="finding-badge high">High</span>
+                        <span className="finding-text">
+                          Potential impact is severe ({evalStats.impact.avg.toFixed(1)}/10) - prioritize mitigation controls
+                        </span>
+                      </div>
+                    )}
+                    {evalStats.detection.avg >= 7.0 && (
+                      <div className="finding-item medium">
+                        <span className="finding-badge medium">Medium</span>
+                        <span className="finding-text">
+                          Attack paths are difficult to detect ({evalStats.detection.avg.toFixed(1)}/10) - enhance monitoring
+                        </span>
+                      </div>
+                    )}
+                    {evalStats.composite.avg < 5.0 && (
+                      <div className="finding-item low">
+                        <span className="finding-badge low">Low</span>
+                        <span className="finding-text">
+                          Overall risk score is moderate ({evalStats.composite.avg.toFixed(1)}/10) - standard security posture adequate
+                        </span>
+                      </div>
+                    )}
+                    {result.final_paths.some(p => p.challenged) && (
+                      <div className="finding-item info">
+                        <span className="finding-badge info">Info</span>
+                        <span className="finding-text">
+                          {result.final_paths.filter(p => p.challenged).length} path(s) challenged by red team - review arbitration notes
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Adversarial Validation Summary */}
+                {result.adversarial_summary && (
+                  <div className="adversarial-validation-summary">
+                    <h4 style={{ fontSize: '0.9375rem', marginBottom: '0.75rem', color: '#1e293b' }}>
+                      ⚔️ Adversarial Validation
+                    </h4>
+                    <div className="adversarial-stats">
+                      <div className="adversarial-stat-item">
+                        <span className="adversarial-label">Coverage Estimate:</span>
+                        <span className="adversarial-value">{result.adversarial_summary.coverage_estimate || 'N/A'}</span>
+                      </div>
+                      {result.adversarial_summary.red_team_challenges && (
+                        <div className="adversarial-stat-item">
+                          <span className="adversarial-label">Red Team Challenges:</span>
+                          <span className="adversarial-value">{result.adversarial_summary.red_team_challenges}</span>
+                        </div>
+                      )}
+                      {result.adversarial_summary.blue_team_gaps && (
+                        <div className="adversarial-stat-item">
+                          <span className="adversarial-label">Blue Team Gaps Identified:</span>
+                          <span className="adversarial-value">{result.adversarial_summary.blue_team_gaps}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Attack Path Cards */}
           <div className="attack-paths-list">

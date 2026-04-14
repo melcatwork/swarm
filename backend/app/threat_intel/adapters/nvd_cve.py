@@ -7,6 +7,7 @@ from typing import List
 
 import requests
 
+from app.utils.timezone import now_gmt8
 from ..core.models import ThreatIntelItem, SourceConfig
 from .base_adapter import BaseAdapter
 
@@ -48,7 +49,7 @@ class NvdCveAdapter(BaseAdapter):
             Exception: Logs errors but returns empty list on failure
         """
         # Calculate date range (last 7 days)
-        end_date = datetime.now(timezone.utc)
+        end_date = now_gmt8()
         start_date = end_date - timedelta(days=7)
 
         # Format dates as ISO 8601 strings
@@ -167,7 +168,7 @@ class NvdCveAdapter(BaseAdapter):
             try:
                 published = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
             except (ValueError, AttributeError):
-                published = datetime.now(timezone.utc)
+                published = now_gmt8()
                 logger.warning(f"Invalid published date for {cve_id}, using current time")
 
             # Extract severity from CVSS v3.1 metrics

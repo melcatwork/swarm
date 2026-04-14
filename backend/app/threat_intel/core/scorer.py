@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List
 
+from app.utils.timezone import now_gmt8
 from .models import ThreatIntelItem
 
 logger = logging.getLogger(__name__)
@@ -107,7 +108,7 @@ class CitationScorer:
         Returns:
             Recency weight: today=3.0, yesterday=2.0, this week=1.0, older=0.5
         """
-        now = datetime.now(timezone.utc)
+        now = now_gmt8()
 
         # Ensure published datetime is timezone-aware
         if published.tzinfo is None:

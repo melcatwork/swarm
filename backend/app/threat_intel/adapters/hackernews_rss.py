@@ -8,6 +8,7 @@ from typing import List
 
 import feedparser
 
+from app.utils.timezone import now_gmt8
 from ..core.models import ThreatIntelItem, SourceConfig
 from .base_adapter import BaseAdapter
 
@@ -206,7 +207,7 @@ class HackerNewsRssAdapter(BaseAdapter):
             logger.warning(f"Error parsing published date: {e}")
 
         # Default to current time if parsing fails
-        return datetime.now(timezone.utc)
+        return now_gmt8()
 
     def _extract_cves(self, content: str) -> List[str]:
         """

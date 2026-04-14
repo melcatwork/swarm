@@ -10,7 +10,7 @@ import axios from 'axios';
 // Create axios instance with base configuration
 const apiClient = axios.create({
   baseURL: 'http://localhost:8000',
-  timeout: 30000,
+  timeout: 1800000, // 30 minutes (increased for long-running LLM operations)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -162,19 +162,24 @@ export const checkHealth = async () => {
 /**
  * Upload IaC file and run full threat modeling swarm (all enabled agents)
  * @param {File} file - IaC file (.tf, .yaml, .yml, or .json)
+ * @param {string} model - Optional model name to use (e.g., "qwen3:14b", "gemma4:e4b")
  * @returns {Promise<Object>} Complete threat model with final paths, mitigations, scores
  * @throws {Error} With user-friendly message on failure
  */
-export const uploadAndRunSwarm = async (file) => {
+export const uploadAndRunSwarm = async (file, model = null, cancelToken = null) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
+    if (model) {
+      formData.append('model', model);
+    }
 
     const response = await apiClient.post('/api/swarm/run', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
       timeout: 1800000, // 30 minutes for full pipeline (increased for larger models)
+      cancelToken: cancelToken, // Support request cancellation
     });
     return response.data;
   } catch (error) {
@@ -190,7 +195,7 @@ export const uploadAndRunSwarm = async (file) => {
  * @returns {Promise<Object>} Complete threat model with final paths, mitigations, scores
  * @throws {Error} With user-friendly message on failure
  */
-export const uploadAndRunQuick = async (file, model = null) => {
+export const uploadAndRunQuick = async (file, model = null, cancelToken = null) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
@@ -203,6 +208,7 @@ export const uploadAndRunQuick = async (file, model = null) => {
         'Content-Type': 'multipart/form-data',
       },
       timeout: 1200000, // 20 minutes for quick pipeline (increased for larger models)
+      cancelToken: cancelToken, // Support request cancellation
     });
     return response.data;
   } catch (error) {
@@ -215,19 +221,24 @@ export const uploadAndRunQuick = async (file, model = null) => {
  * Upload IaC file and run single agent threat modeling test
  * @param {File} file - IaC file (.tf, .yaml, .yml, or .json)
  * @param {string} agentName - Name of the persona to use
+ * @param {string} model - Optional model name to use (e.g., "qwen3:14b", "gemma4:e4b")
  * @returns {Promise<Object>} Complete threat model with final paths, mitigations, scores
  * @throws {Error} With user-friendly message on failure
  */
-export const uploadAndRunSingleAgent = async (file, agentName) => {
+export const uploadAndRunSingleAgent = async (file, agentName, model = null, cancelToken = null) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
+    if (model) {
+      formData.append('model', model);
+    }
 
     const response = await apiClient.post(`/api/swarm/run/single?agent_name=${agentName}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
       timeout: 1200000, // 20 minutes for single agent pipeline (increased for larger models)
+      cancelToken: cancelToken, // Support request cancellation
     });
     return response.data;
   } catch (error) {
@@ -388,6 +399,40 @@ export const deleteArchivedRun = async (runId) => {
 export const getArchiveStats = async () => {
   try {
     const response = await apiClient.get('/api/archive/stats');
+    return response.data;
+  } catch (error) {
+    const message = formatErrorMessage(error);
+    throw new Error(message);
+  }
+};
+
+/**
+ * Cancel a running threat modeling job
+ * @param {string} jobId - Job ID to cancel
+ * @returns {Promise<Object>} Cancellation response
+ * @throws {Error} With user-friendly message on failure
+ */
+export const cancelRun = async (jobId) => {
+  try {
+    const response = await apiClient.post(`/api/swarm/cancel/${jobId}`);
+    return response.data;
+  } catch (error) {
+    const message = formatErrorMessage(error);
+    throw new Error(message);
+  }
+};
+
+/**
+ * Configure AWS Bedrock bearer token
+ * @param {Object} config - AWS bearer token configuration
+ * @param {string} config.aws_bearer_token - AWS Bedrock bearer token
+ * @param {string} config.aws_region - AWS Region (default: us-east-1)
+ * @returns {Promise<Object>} Configuration result with available models
+ * @throws {Error} With user-friendly message on failure
+ */
+export const configureBedrockCredentials = async (config) => {
+  try {
+    const response = await apiClient.post('/api/llm/bedrock/configure', config);
     return response.data;
   } catch (error) {
     const message = formatErrorMessage(error);

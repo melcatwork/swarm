@@ -17,7 +17,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel, Field
 
 from app.swarm import PersonaRegistry
@@ -110,6 +110,68 @@ def get_current_model_name(model_override: str = None) -> str:
         return settings.ANTHROPIC_MODEL
     else:
         return "unknown"
+
+
+def validate_model_not_wip(model: str = None):
+    """
+    Validate that the selected model is not marked as Work In Progress.
+
+    Only uncommented models from .env can be used for threat modeling.
+    Commented models are considered Work In Progress and disabled.
+
+    Args:
+        model: Optional model override from user selection
+
+    Raises:
+        HTTPException: 400 if model is WIP (commented in .env)
+    """
+    settings = get_settings()
+
+    # If no model override, use default from .env (always valid)
+    if not model:
+        return
+
+    # Only check Ollama models (Bedrock/Anthropic don't support WIP)
+    if settings.LLM_PROVIDER != "ollama":
+        return
+
+    # Parse .env to find commented models
+    import re
+    from pathlib import Path
+
+    # Go up from backend/app/routers to project root
+    env_path = Path(__file__).parent.parent.parent.parent / ".env"
+    if not env_path.exists():
+        logger.warning(f".env file not found at {env_path}, skipping WIP validation")
+        return
+
+    try:
+        with open(env_path, "r") as f:
+            content = f.read()
+
+        # Check if the model is commented in .env
+        commented_pattern = r'^\s*#\s*OLLAMA_MODEL\s*=\s*([^\s#]+)'
+        for match in re.finditer(commented_pattern, content, re.MULTILINE):
+            commented_model = match.group(1).strip().strip('"').strip("'")
+            if commented_model == model:
+                logger.warning(f"User attempted to use WIP model: {model}")
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "Model Not Available",
+                        "message": f"The model '{model}' is marked as Work In Progress and cannot be used. "
+                                  f"Please select the default model or another enabled model.",
+                        "model": model,
+                        "status": "work_in_progress"
+                    }
+                )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error validating model WIP status: {e}")
+        # Don't block execution if validation fails
+        return
 
 
 class PersonaBase(BaseModel):
@@ -1010,7 +1072,10 @@ class JobResultResponse(BaseModel):
 
 
 @router.post("/run", response_model=PipelineResponse)
-async def run_full_pipeline(file: UploadFile = File(...)):
+async def run_full_pipeline(
+    file: UploadFile = File(...),
+    model: str = Form(None)
+):
     """
     Run the complete threat modeling pipeline on an IaC file.
 
@@ -1054,9 +1119,18 @@ async def run_full_pipeline(file: UploadFile = File(...)):
 
     start_time = time.time()
 
+    # Log model selection
+    if model:
+        logger.info(f"Full pipeline using model override: {model}")
+    else:
+        logger.info("Full pipeline using default model from .env")
+
     try:
         # Check LLM configuration before starting
         check_llm_configured()
+
+        # Validate model is not WIP
+        validate_model_not_wip(model)
 
         # Phase 1: Parse IaC file
         logger.info("=" * 60)
@@ -1074,7 +1148,7 @@ async def run_full_pipeline(file: UploadFile = File(...)):
         # Phase 2: Exploration (Layer 1)
         logger.info("Pipeline Phase 2: Exploration (Layer 1)")
         exploration_start = time.time()
-        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context)
+        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
         exploration_time = time.time() - exploration_start
 
         enabled_personas = persona_registry.get_enabled()
@@ -1093,7 +1167,7 @@ async def run_full_pipeline(file: UploadFile = File(...)):
         # Phase 3: Evaluation (Layer 2)
         logger.info("Pipeline Phase 3: Evaluation (Layer 2)")
         evaluation_start = time.time()
-        scored_paths = _run_evaluation(exploration_paths, asset_graph_dict)
+        scored_paths = _run_evaluation(exploration_paths, asset_graph_dict, model=model)
         evaluation_time = time.time() - evaluation_start
 
         # Calculate evaluation summary
@@ -1124,7 +1198,7 @@ async def run_full_pipeline(file: UploadFile = File(...)):
         asset_graph_json = json.dumps(asset_graph_dict, indent=2)
 
         # Build and execute adversarial crew
-        adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json)
+        adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json, model_override=model)
         adversarial_output = adversarial_crew.kickoff()
 
         # Parse adversarial results
@@ -1224,7 +1298,10 @@ async def run_full_pipeline(file: UploadFile = File(...)):
 
 
 @router.post("/run/quick", response_model=PipelineResponse)
-async def run_quick_pipeline(file: UploadFile = File(...)):
+async def run_quick_pipeline(
+    file: UploadFile = File(...),
+    model: str = Form(None)
+):
     """
     Run a quick version of the threat modeling pipeline with reduced agents.
 
@@ -1245,6 +1322,7 @@ async def run_quick_pipeline(file: UploadFile = File(...)):
 
     Args:
         file: IaC file upload (.tf, .yaml, .yml, or .json)
+        model: Optional LLM model name to use (e.g., "qwen3:14b", "gemma4:e4b")
 
     Returns:
         PipelineResponse with threat model from 2 exploration agents
@@ -1258,6 +1336,12 @@ async def run_quick_pipeline(file: UploadFile = File(...)):
 
     start_time = time.time()
 
+    # Log model selection
+    if model:
+        logger.info(f"Quick pipeline using model override: {model}")
+    else:
+        logger.info("Quick pipeline using default model from .env")
+
     # Save original persona states
     registry = PersonaRegistry()
     original_states = {
@@ -1268,6 +1352,9 @@ async def run_quick_pipeline(file: UploadFile = File(...)):
     try:
         # Check LLM configuration before starting
         check_llm_configured()
+
+        # Validate model is not WIP
+        validate_model_not_wip(model)
 
         # Phase 1: Parse IaC file
         logger.info("=" * 60)
@@ -1293,7 +1380,7 @@ async def run_quick_pipeline(file: UploadFile = File(...)):
         # Phase 2: Exploration (Layer 1) - Quick mode with 2 agents
         logger.info("Quick Pipeline Phase 2: Exploration with 2 agents")
         exploration_start = time.time()
-        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context)
+        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
         exploration_time = time.time() - exploration_start
 
         exploration_summary = {
@@ -1311,7 +1398,7 @@ async def run_quick_pipeline(file: UploadFile = File(...)):
         # Phase 3: Evaluation (Layer 2)
         logger.info("Quick Pipeline Phase 3: Evaluation (Layer 2)")
         evaluation_start = time.time()
-        scored_paths = _run_evaluation(exploration_paths, asset_graph_dict)
+        scored_paths = _run_evaluation(exploration_paths, asset_graph_dict, model=model)
         evaluation_time = time.time() - evaluation_start
 
         composite_scores = [
@@ -1339,7 +1426,7 @@ async def run_quick_pipeline(file: UploadFile = File(...)):
         scored_paths_json = json.dumps(scored_paths, indent=2)
         asset_graph_json = json.dumps(asset_graph_dict, indent=2)
 
-        adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json)
+        adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json, model_override=model)
         adversarial_output = adversarial_crew.kickoff()
 
         adversarial_result = parse_adversarial_results(adversarial_output, scored_paths)
@@ -1394,7 +1481,7 @@ async def run_quick_pipeline(file: UploadFile = File(...)):
                 file_name=file.filename,
                 mode="quick",
                 agent_name=None,
-                model_used=get_current_model_name(),
+                model_used=get_current_model_name(model),
             )
             logger.info(f"Archived quick pipeline run for {file.filename}")
         except Exception as e:
@@ -1446,7 +1533,8 @@ async def run_quick_pipeline(file: UploadFile = File(...)):
 @router.post("/run/single", response_model=PipelineResponse)
 async def run_single_agent_pipeline(
     file: UploadFile = File(...),
-    agent_name: str = "apt29_cozy_bear"
+    agent_name: str = "apt29_cozy_bear",
+    model: str = Form(None)
 ):
     """
     Run threat modeling pipeline with a single selected agent.
@@ -1490,6 +1578,9 @@ async def run_single_agent_pipeline(
         # Check LLM configuration before starting
         check_llm_configured()
 
+        # Validate model is not WIP
+        validate_model_not_wip(model)
+
         # Validate that the requested agent exists
         selected_persona = registry.get_by_name(agent_name)
         if selected_persona is None:
@@ -1522,7 +1613,7 @@ async def run_single_agent_pipeline(
         # Phase 2: Exploration (Layer 1) - Single agent mode
         logger.info(f"Single Agent Phase 2: Exploration with {selected_persona['display_name']}")
         exploration_start = time.time()
-        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context)
+        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
         exploration_time = time.time() - exploration_start
 
         exploration_summary = {
@@ -1542,7 +1633,7 @@ async def run_single_agent_pipeline(
         # Phase 3: Evaluation (Layer 2)
         logger.info("Single Agent Phase 3: Evaluation (Layer 2)")
         evaluation_start = time.time()
-        scored_paths = _run_evaluation(exploration_paths, asset_graph_dict)
+        scored_paths = _run_evaluation(exploration_paths, asset_graph_dict, model=model)
         evaluation_time = time.time() - evaluation_start
 
         composite_scores = [
@@ -1570,7 +1661,7 @@ async def run_single_agent_pipeline(
         scored_paths_json = json.dumps(scored_paths, indent=2)
         asset_graph_json = json.dumps(asset_graph_dict, indent=2)
 
-        adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json)
+        adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json, model_override=model)
         adversarial_output = adversarial_crew.kickoff()
 
         adversarial_result = parse_adversarial_results(adversarial_output, scored_paths)
@@ -1625,7 +1716,7 @@ async def run_single_agent_pipeline(
                 file_name=file.filename,
                 mode="single",
                 agent_name=agent_name,
-                model_used=get_current_model_name(),
+                model_used=get_current_model_name(model),
             )
             logger.info(f"Archived single agent pipeline run for {file.filename} (agent: {agent_name})")
         except Exception as e:
@@ -1762,6 +1853,54 @@ async def list_jobs(limit: int = 20):
     return [JobStatusResponse(**job) for job in jobs]
 
 
+@router.post("/cancel/{job_id}")
+async def cancel_job(job_id: str):
+    """
+    Cancel a running pipeline job.
+
+    Args:
+        job_id: Job ID to cancel
+
+    Returns:
+        Cancellation status message
+
+    Raises:
+        HTTPException 404: Job not found
+        HTTPException 400: Job cannot be cancelled (already completed/failed/cancelled)
+    """
+    tracker = get_job_tracker()
+    job = tracker.get_job(job_id)
+
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} not found"
+        )
+
+    # Check if job can be cancelled
+    if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel job: already {job.status.value}"
+        )
+
+    # Cancel the job
+    success = tracker.cancel_job(job_id)
+
+    if success:
+        logger.info(f"Job {job_id[:8]} cancelled successfully via API")
+        return {
+            "status": "success",
+            "message": f"Job {job_id} has been cancelled",
+            "job_id": job_id
+        }
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to cancel job"
+        )
+
+
 # =============================================================================
 # Background Pipeline Execution
 # =============================================================================
@@ -1812,7 +1951,12 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
         # Build threat intel context
         tracker.update_job(job_id, JobStatus.PARSING, 10, "Loading threat intelligence")
         threat_intel_context, intel_count = _build_threat_intel_context()
-        
+
+        # Check for cancellation after parsing
+        if tracker.is_job_cancelled(job_id):
+            logger.info(f"Job {job_id[:8]} cancelled after parsing phase")
+            return
+
         # Configure personas for quick mode (2 agents)
         registry = PersonaRegistry()
         original_states = {name: p.get("enabled", True) for name, p in registry.get_all().items()}
@@ -1835,6 +1979,11 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
                 "execution_time_seconds": round(exploration_time, 2),
             }
 
+            # Check for cancellation after exploration
+            if tracker.is_job_cancelled(job_id):
+                logger.info(f"Job {job_id[:8]} cancelled after exploration phase")
+                return
+
             # Phase 2: Evaluation
             tracker.update_job(job_id, JobStatus.EVALUATION, 50, "Scoring attack paths (5 evaluators)")
             evaluation_start = time.time()
@@ -1846,7 +1995,12 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
                 "paths_scored": len(scored_paths),
                 "execution_time_seconds": round(evaluation_time, 2),
             }
-            
+
+            # Check for cancellation after evaluation
+            if tracker.is_job_cancelled(job_id):
+                logger.info(f"Job {job_id[:8]} cancelled after evaluation phase")
+                return
+
             # Phase 3: Adversarial Validation
             tracker.update_job(job_id, JobStatus.ADVERSARIAL, 75, "Adversarial validation (red/blue/arbitrator)")
             
@@ -1869,7 +2023,12 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
                 "paths_added": len(red_analysis.get("additional_paths", [])),
                 "execution_time_seconds": round(adversarial_time, 2),
             }
-            
+
+            # Check for cancellation after adversarial validation
+            if tracker.is_job_cancelled(job_id):
+                logger.info(f"Job {job_id[:8]} cancelled after adversarial validation phase")
+                return
+
             # Phase 4: Mitigation Mapping
             tracker.update_job(job_id, JobStatus.MITIGATIONS, 90, "Mapping mitigations")
             final_paths_with_mitigations = map_mitigations(adversarial_result["final_paths"])

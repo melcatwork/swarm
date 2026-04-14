@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Tuple, Optional
 
 import yaml
 
+from app.utils.timezone import now_gmt8
 from .models import (
     Asset,
     Relationship,
@@ -198,7 +199,7 @@ class CloudFormationParser:
         metadata = {
             "source_file": "cloudformation",
             "format": file_extension,
-            "parsed_at": datetime.now(timezone.utc).isoformat(),
+            "parsed_at": now_gmt8().isoformat(),
             "resource_count": len(self.resources),
         }
 

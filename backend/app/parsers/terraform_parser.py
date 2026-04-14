@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Tuple
 
 import hcl2
 
+from app.utils.timezone import now_gmt8
 from .models import (
     Asset,
     Relationship,
@@ -134,7 +135,7 @@ class TerraformParser:
         metadata = {
             "source_file": "terraform",
             "format": "hcl2",
-            "parsed_at": datetime.now(timezone.utc).isoformat(),
+            "parsed_at": now_gmt8().isoformat(),
             "resource_count": len(self.resources),
         }
 

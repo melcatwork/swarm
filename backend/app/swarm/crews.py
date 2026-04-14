@@ -38,9 +38,9 @@ def get_llm(model_override: str = None, provider_override: str = None) -> LLM:
         logger.info(f"[get_llm] Using model override: {model_override}")
         # Detect provider from model override if not explicitly provided
         if not provider_override:
-            if model_override.startswith("bedrock/"):
+            if model_override.startswith("bedrock/") or model_override.startswith("anthropic.claude"):
                 provider = "bedrock"
-            elif "claude" in model_override.lower() and not model_override.startswith("ollama/"):
+            elif "claude" in model_override.lower() and not model_override.startswith("ollama/") and not model_override.startswith("anthropic."):
                 provider = "anthropic"
             else:
                 provider = settings.LLM_PROVIDER  # Keep current provider
@@ -61,13 +61,25 @@ def get_llm(model_override: str = None, provider_override: str = None) -> LLM:
 
     if provider == "bedrock":
         # Set environment variables for LiteLLM/boto3 to use Bedrock with bearer token
-        if settings.AWS_BEARER_TOKEN_BEDROCK:
-            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = settings.AWS_BEARER_TOKEN_BEDROCK
-        if settings.AWS_REGION_NAME:
-            os.environ["AWS_REGION_NAME"] = settings.AWS_REGION_NAME
+        if not settings.AWS_BEARER_TOKEN_BEDROCK:
+            logger.error("No AWS bearer token configured for Bedrock")
+            raise RuntimeError("AWS Bedrock requires AWS_BEARER_TOKEN_BEDROCK to be set")
 
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = settings.AWS_BEARER_TOKEN_BEDROCK
+        logger.info("Using AWS bearer token for Bedrock")
+
+        if settings.AWS_REGION:
+            os.environ["AWS_REGION_NAME"] = settings.AWS_REGION
+            os.environ["AWS_DEFAULT_REGION"] = settings.AWS_REGION
+            os.environ["AWS_REGION"] = settings.AWS_REGION
+
+        # Format model name for Bedrock
         bedrock_model = model_override or settings.BEDROCK_MODEL
-        logger.info(f"Using AWS Bedrock with model: {bedrock_model}, temp={settings.LLM_TEMPERATURE}")
+        # If model doesn't have bedrock/ prefix, add it
+        if not bedrock_model.startswith("bedrock/"):
+            bedrock_model = f"bedrock/{bedrock_model}"
+
+        logger.info(f"Using AWS Bedrock with model: {bedrock_model}, region: {settings.AWS_REGION}, temp={settings.LLM_TEMPERATURE}")
         llm = LLM(
             model=bedrock_model,
             temperature=settings.LLM_TEMPERATURE,
@@ -430,25 +442,31 @@ def parse_exploration_results(crew_output) -> List[Dict]:
                                     normalized_step["technique_id"] = tech_id
 
                                     # Normalize technique_name
-                                    tech_name = step.get("technique_name") or step.get("techniqueName") or ""
+                                    tech_name = step.get("technique_name") or step.get("techniqueName") or step.get("technique") or ""
                                     if not tech_name:
                                         logger.error(f"Missing technique_name in step {step_idx + 1}, raw step data: {step}")
                                         tech_name = "Unknown Technique"
                                     normalized_step["technique_name"] = tech_name
 
                                     # Normalize target_asset
-                                    target = step.get("target_asset") or step.get("targetAsset") or step.get("asset") or ""
+                                    target = step.get("target_asset") or step.get("targetAsset") or step.get("target") or step.get("asset") or ""
                                     if not target:
                                         logger.error(f"Missing target_asset in step {step_idx + 1}, raw step data: {step}")
                                         target = "unknown_asset"
                                     normalized_step["target_asset"] = target
 
                                     # Normalize action_description
-                                    action_desc = step.get("action_description") or step.get("description") or step.get("action") or ""
+                                    action_desc = (
+                                        step.get("action_description")
+                                        or step.get("description")
+                                        or step.get("attack_details")
+                                        or step.get("action")
+                                        or ""
+                                    )
                                     normalized_step["action_description"] = action_desc
 
                                     # Normalize outcome
-                                    normalized_step["outcome"] = step.get("outcome") or ""
+                                    normalized_step["outcome"] = step.get("outcome") or step.get("impact") or ""
 
                                     # Normalize mitigation (can be None)
                                     mitigation = step.get("mitigation")
@@ -1209,14 +1227,20 @@ def parse_adversarial_results(
 
             enriched_final_paths = []
             for final_path in final_paths:
-                path_name = final_path.get("name", "")
+                # Try both "path_name" (from arbitrator LLM) and "name" (standard key)
+                path_name = final_path.get("path_name") or final_path.get("name", "")
 
                 # Start with scored path data if it exists, otherwise use final path as base
-                if path_name in scored_lookup:
+                if path_name and path_name in scored_lookup:
                     enriched_path = {**scored_lookup[path_name]}
+                    logger.info(f"Merged arbitrator validation with scored path: {path_name}")
                 else:
-                    # This is a new path from red team
+                    # This is a new path from red team or lookup failed
                     enriched_path = {**final_path}
+                    if path_name:
+                        logger.warning(f"Could not find scored path for: {path_name}")
+                    else:
+                        logger.warning("Arbitrator path missing name/path_name key")
 
                 # Overlay arbitrator's validation data
                 enriched_path.update({
@@ -1224,12 +1248,30 @@ def parse_adversarial_results(
                     "validation_notes": final_path.get("validation_notes", ""),
                     "challenged": final_path.get("challenged", False),
                     "challenge_resolution": final_path.get("challenge_resolution"),
+                    "challenged_steps": final_path.get("challenged_steps", []),
+                    "status": final_path.get("status", "valid"),
                 })
+
+                # Ensure "name" key exists for frontend compatibility
+                if "name" not in enriched_path and path_name:
+                    enriched_path["name"] = path_name
 
                 enriched_final_paths.append(enriched_path)
 
             result["final_paths"] = enriched_final_paths
             logger.info(f"Arbitrator produced {len(enriched_final_paths)} final validated paths")
+
+            # Fallback if arbitrator returned empty final_paths
+            if len(enriched_final_paths) == 0:
+                logger.warning(f"Arbitrator returned 0 paths despite {len(scored_paths)} scored paths available")
+                logger.warning("Using scored paths as fallback for final_paths")
+                # Add default validation metadata to scored paths
+                for scored_path in scored_paths:
+                    scored_path.setdefault("confidence", "medium")
+                    scored_path.setdefault("validation_notes", "Arbitrator did not produce final_paths; using evaluation scores")
+                    scored_path.setdefault("challenged", False)
+                result["final_paths"] = scored_paths
+                logger.info(f"Fallback: Using {len(scored_paths)} scored paths as final paths")
 
         else:
             # Fallback: if arbitrator didn't run, use scored paths as final paths

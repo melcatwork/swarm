@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 
 import requests
 
+from app.utils.timezone import now_gmt8
 from ..core.models import ThreatIntelItem, SourceConfig
 from .base_adapter import BaseAdapter
 
@@ -115,7 +116,7 @@ class AttackStixAdapter(BaseAdapter):
             self.CACHE_FILE.stat().st_mtime,
             tz=timezone.utc
         )
-        age = datetime.now(timezone.utc) - file_mtime
+        age = now_gmt8() - file_mtime
         max_age = timedelta(hours=self.CACHE_MAX_AGE_HOURS)
 
         is_valid = age < max_age
@@ -217,7 +218,7 @@ class AttackStixAdapter(BaseAdapter):
             try:
                 published = datetime.fromisoformat(modified_str.replace("Z", "+00:00"))
             except (ValueError, AttributeError):
-                published = datetime.now(timezone.utc)
+                published = now_gmt8()
 
             # Extract tactics from kill chain phases
             tags = []

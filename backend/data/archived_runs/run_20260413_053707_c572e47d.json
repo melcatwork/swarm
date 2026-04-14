@@ -1,0 +1,860 @@
+{
+  "metadata": {
+    "run_id": "run_20260413_053707_c572e47d",
+    "name": "TM Swarm Run - ecommerce-platform - 2026-04-13 05:37",
+    "created_at": "2026-04-13T05:37:07.490324Z",
+    "updated_at": null,
+    "file_name": "ecommerce-platform.tf",
+    "file_type": ".tf",
+    "mode": "quick",
+    "agent_name": null,
+    "execution_time_seconds": 963.4,
+    "paths_count": 3,
+    "model_used": "qwen3:14b"
+  },
+  "result": {
+    "status": "ok",
+    "asset_graph": {
+      "assets": [
+        {
+          "id": "aws_vpc.ecommerce_vpc",
+          "name": "ecommerce_vpc",
+          "type": "network.vpc",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {},
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_subnet.public_subnet_1",
+          "name": "public_subnet_1",
+          "type": "network.subnet",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_subnet.public_subnet_2",
+          "name": "public_subnet_2",
+          "type": "network.subnet",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_subnet.private_subnet_1",
+          "name": "private_subnet_1",
+          "type": "network.subnet",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_subnet.private_subnet_2",
+          "name": "private_subnet_2",
+          "type": "network.subnet",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_internet_gateway.ecommerce_igw",
+          "name": "ecommerce_igw",
+          "type": "network.gateway",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_route_table.public_rt",
+          "name": "public_rt",
+          "type": "network.route_table",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_route_table_association.public_rta_1",
+          "name": "public_rta_1",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_route_table_association",
+          "properties": {
+            "subnet": "aws_subnet.public_subnet_1"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_route_table_association.public_rta_2",
+          "name": "public_rta_2",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_route_table_association",
+          "properties": {
+            "subnet": "aws_subnet.public_subnet_2"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_security_group.web_sg",
+          "name": "web_sg",
+          "type": "network.security_group",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "ports": [
+              80,
+              443,
+              22
+            ],
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_security_group.database_sg",
+          "name": "database_sg",
+          "type": "network.security_group",
+          "cloud": "aws",
+          "service": "VPC",
+          "properties": {
+            "ports": [
+              5432
+            ],
+            "vpc": "aws_vpc.ecommerce_vpc"
+          },
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_role.developer_role",
+          "name": "developer_role",
+          "type": "identity.iam_role",
+          "cloud": "aws",
+          "service": "IAM",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "management"
+        },
+        {
+          "id": "aws_iam_role_policy.developer_s3_policy",
+          "name": "developer_s3_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_role_policy",
+          "properties": {
+            "iam_role": "aws_iam_role.developer_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_role_policy.developer_secrets_policy",
+          "name": "developer_secrets_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_role_policy",
+          "properties": {
+            "iam_role": "aws_iam_role.developer_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_role.app_server_role",
+          "name": "app_server_role",
+          "type": "identity.iam_role",
+          "cloud": "aws",
+          "service": "IAM",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "management"
+        },
+        {
+          "id": "aws_iam_role_policy.app_server_rds_policy",
+          "name": "app_server_rds_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_role_policy",
+          "properties": {
+            "iam_role": "aws_iam_role.app_server_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_instance_profile.developer_profile",
+          "name": "developer_profile",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_instance_profile",
+          "properties": {
+            "iam_role": "aws_iam_role.developer_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_iam_instance_profile.app_server_profile",
+          "name": "app_server_profile",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_instance_profile",
+          "properties": {
+            "iam_role": "aws_iam_role.app_server_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket.customer_data",
+          "name": "customer_data",
+          "type": "storage.object",
+          "cloud": "aws",
+          "service": "S3",
+          "properties": {
+            "public": false
+          },
+          "data_sensitivity": "high",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket_versioning.customer_data_versioning",
+          "name": "customer_data_versioning",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_s3_bucket_versioning",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket_policy.customer_data_policy",
+          "name": "customer_data_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_s3_bucket_policy",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket.product_images",
+          "name": "product_images",
+          "type": "storage.object",
+          "cloud": "aws",
+          "service": "S3",
+          "properties": {
+            "public": false
+          },
+          "data_sensitivity": "high",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket_public_access_block.product_images_public",
+          "name": "product_images_public",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_s3_bucket_public_access_block",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_s3_bucket.order_exports",
+          "name": "order_exports",
+          "type": "storage.object",
+          "cloud": "aws",
+          "service": "S3",
+          "properties": {
+            "public": false
+          },
+          "data_sensitivity": "high",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_db_subnet_group.ecommerce_db_subnet",
+          "name": "ecommerce_db_subnet",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_db_subnet_group",
+          "properties": {
+            "subnet": "aws_subnet.private_subnet_1"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_db_instance.ecommerce_db",
+          "name": "ecommerce_db",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_db_instance",
+          "properties": {
+            "security_groups": [
+              "aws_security_group.database_sg"
+            ],
+            "engine": "postgres",
+            "allocated_storage": 100,
+            "publicly_accessible": false
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_instance.web_server_1",
+          "name": "web_server_1",
+          "type": "compute.vm",
+          "cloud": "aws",
+          "service": "EC2",
+          "properties": {
+            "iam_role": "aws_iam_instance_profile.app_server_profile",
+            "subnet": "aws_subnet.public_subnet_1",
+            "security_groups": [
+              "aws_security_group.web_sg"
+            ],
+            "instance_type": "t3.medium"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_instance.developer_workstation",
+          "name": "developer_workstation",
+          "type": "compute.vm",
+          "cloud": "aws",
+          "service": "EC2",
+          "properties": {
+            "iam_role": "aws_iam_instance_profile.developer_profile",
+            "subnet": "aws_subnet.public_subnet_1",
+            "security_groups": [
+              "aws_security_group.web_sg"
+            ],
+            "instance_type": "t3.large"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "vpc-internal"
+        },
+        {
+          "id": "aws_iam_role.order_processor_lambda_role",
+          "name": "order_processor_lambda_role",
+          "type": "identity.iam_role",
+          "cloud": "aws",
+          "service": "IAM",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "management"
+        },
+        {
+          "id": "aws_iam_role_policy.lambda_excessive_policy",
+          "name": "lambda_excessive_policy",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_iam_role_policy",
+          "properties": {
+            "iam_role": "aws_iam_role.order_processor_lambda_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_lambda_function.order_processor",
+          "name": "order_processor",
+          "type": "compute.serverless",
+          "cloud": "aws",
+          "service": "Lambda",
+          "properties": {
+            "iam_role": "aws_iam_role.order_processor_lambda_role"
+          },
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_secretsmanager_secret.payment_gateway",
+          "name": "payment_gateway",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_secretsmanager_secret",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_secretsmanager_secret_version.payment_gateway_version",
+          "name": "payment_gateway_version",
+          "type": "other.unknown",
+          "cloud": "aws",
+          "service": "aws_secretsmanager_secret_version",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_cloudwatch_log_group.application_logs",
+          "name": "application_logs",
+          "type": "monitoring.logs",
+          "cloud": "aws",
+          "service": "CloudWatch",
+          "properties": {},
+          "data_sensitivity": "low",
+          "trust_boundary": "private"
+        },
+        {
+          "id": "aws_sns_topic.order_notifications",
+          "name": "order_notifications",
+          "type": "messaging.topic",
+          "cloud": "aws",
+          "service": "SNS",
+          "properties": {},
+          "data_sensitivity": "medium",
+          "trust_boundary": "private"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "aws_subnet.public_subnet_1",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_subnet.public_subnet_2",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_subnet.private_subnet_1",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_subnet.private_subnet_2",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_internet_gateway.ecommerce_igw",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_route_table.public_rt",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_route_table_association.public_rta_1",
+          "target": "aws_subnet.public_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_route_table_association.public_rta_2",
+          "target": "aws_subnet.public_subnet_2",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_security_group.web_sg",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_security_group.database_sg",
+          "target": "aws_vpc.ecommerce_vpc",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_iam_role_policy.developer_s3_policy",
+          "target": "aws_iam_role.developer_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_iam_role_policy.developer_secrets_policy",
+          "target": "aws_iam_role.developer_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_iam_role_policy.app_server_rds_policy",
+          "target": "aws_iam_role.app_server_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_iam_instance_profile.developer_profile",
+          "target": "aws_iam_role.developer_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_iam_instance_profile.app_server_profile",
+          "target": "aws_iam_role.app_server_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_db_subnet_group.ecommerce_db_subnet",
+          "target": "aws_subnet.private_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_db_subnet_group.ecommerce_db_subnet",
+          "target": "aws_subnet.private_subnet_2",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_db_instance.ecommerce_db",
+          "target": "aws_security_group.database_sg",
+          "type": "network_access",
+          "properties": {
+            "type": "security_group"
+          }
+        },
+        {
+          "source": "aws_instance.web_server_1",
+          "target": "aws_subnet.public_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_instance.web_server_1",
+          "target": "aws_security_group.web_sg",
+          "type": "network_access",
+          "properties": {
+            "type": "security_group"
+          }
+        },
+        {
+          "source": "aws_instance.web_server_1",
+          "target": "aws_iam_instance_profile.app_server_profile",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "iam_instance_profile"
+          }
+        },
+        {
+          "source": "aws_instance.developer_workstation",
+          "target": "aws_subnet.public_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        },
+        {
+          "source": "aws_instance.developer_workstation",
+          "target": "aws_security_group.web_sg",
+          "type": "network_access",
+          "properties": {
+            "type": "security_group"
+          }
+        },
+        {
+          "source": "aws_instance.developer_workstation",
+          "target": "aws_iam_instance_profile.developer_profile",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "iam_instance_profile"
+          }
+        },
+        {
+          "source": "aws_iam_role_policy.lambda_excessive_policy",
+          "target": "aws_iam_role.order_processor_lambda_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_lambda_function.order_processor",
+          "target": "aws_iam_role.order_processor_lambda_role",
+          "type": "iam_binding",
+          "properties": {
+            "permission_type": "role"
+          }
+        },
+        {
+          "source": "aws_lambda_function.order_processor",
+          "target": "aws_subnet.private_subnet_1",
+          "type": "depends_on",
+          "properties": {
+            "dependency_type": "network"
+          }
+        }
+      ],
+      "trust_boundaries": [
+        {
+          "id": "boundary_vpc-internal",
+          "name": "VPC Internal",
+          "assets": [
+            "aws_route_table_association.public_rta_1",
+            "aws_route_table_association.public_rta_2",
+            "aws_db_subnet_group.ecommerce_db_subnet",
+            "aws_instance.web_server_1",
+            "aws_instance.developer_workstation"
+          ],
+          "exposure": "vpc-internal"
+        },
+        {
+          "id": "boundary_private",
+          "name": "Private Network",
+          "assets": [
+            "aws_vpc.ecommerce_vpc",
+            "aws_subnet.public_subnet_1",
+            "aws_subnet.public_subnet_2",
+            "aws_subnet.private_subnet_1",
+            "aws_subnet.private_subnet_2",
+            "aws_internet_gateway.ecommerce_igw",
+            "aws_route_table.public_rt",
+            "aws_security_group.web_sg",
+            "aws_security_group.database_sg",
+            "aws_iam_role_policy.developer_s3_policy",
+            "aws_iam_role_policy.developer_secrets_policy",
+            "aws_iam_role_policy.app_server_rds_policy",
+            "aws_iam_instance_profile.developer_profile",
+            "aws_iam_instance_profile.app_server_profile",
+            "aws_s3_bucket.customer_data",
+            "aws_s3_bucket_versioning.customer_data_versioning",
+            "aws_s3_bucket_policy.customer_data_policy",
+            "aws_s3_bucket.product_images",
+            "aws_s3_bucket_public_access_block.product_images_public",
+            "aws_s3_bucket.order_exports",
+            "aws_db_instance.ecommerce_db",
+            "aws_iam_role_policy.lambda_excessive_policy",
+            "aws_lambda_function.order_processor",
+            "aws_secretsmanager_secret.payment_gateway",
+            "aws_secretsmanager_secret_version.payment_gateway_version",
+            "aws_cloudwatch_log_group.application_logs",
+            "aws_sns_topic.order_notifications"
+          ],
+          "exposure": "private"
+        },
+        {
+          "id": "boundary_management",
+          "name": "Management Plane",
+          "assets": [
+            "aws_iam_role.developer_role",
+            "aws_iam_role.app_server_role",
+            "aws_iam_role.order_processor_lambda_role"
+          ],
+          "exposure": "management"
+        }
+      ],
+      "metadata": {
+        "source_file": "terraform",
+        "format": "hcl2",
+        "parsed_at": "2026-04-13T05:21:04.180903+00:00",
+        "resource_count": 35
+      }
+    },
+    "exploration_summary": {
+      "agents_used": 2,
+      "raw_paths_found": 4,
+      "execution_time_seconds": 272.02,
+      "threat_intel_items": 0
+    },
+    "evaluation_summary": {
+      "paths_scored": 4,
+      "highest_score": 5.0,
+      "lowest_score": 5.0,
+      "mean_score": 5.0,
+      "execution_time_seconds": 413.56
+    },
+    "adversarial_summary": {
+      "paths_challenged": 6,
+      "paths_added": 3,
+      "coverage_estimate": "65%",
+      "paths_fully_valid": 0,
+      "paths_partially_valid": 3,
+      "paths_invalid": 0,
+      "execution_time_seconds": 273.56
+    },
+    "final_paths": [
+      {
+        "path_name": "Phishing-Driven Console Compromise",
+        "status": "partially_valid",
+        "challenged_steps": [
+          {
+            "kill_chain_phase": "Initial Access",
+            "step_challenged": 1,
+            "challenge_reason": "MFA enforcement for IAM users would block successful phishing credential acquisition as described in the mitigation (AWS GuardDuty and MFA enforcement).",
+            "revised_feasibility_score": 5
+          },
+          {
+            "kill_chain_phase": "Execution",
+            "step_challenged": 2,
+            "challenge_reason": "S3 bucket access requires IAM permissions. If the target S3 bucket has bucket policies restricting console access to specific IAM roles (not users), this step would fail.",
+            "revised_feasibility_score": 6
+          }
+        ],
+        "mitigations": [
+          {
+            "mitigation_id": "M1040",
+            "mitigation_name": "User Training",
+            "description": "Implement multi-factor authentication and phishing simulations",
+            "aws_service_action": "Enforce MFA for all IAM users and enable AWS GuardDuty for anomalous login detection"
+          },
+          {
+            "mitigation_id": "M1023",
+            "mitigation_name": "Data Encryption",
+            "description": "Encrypt data at rest and in transit",
+            "aws_service_action": "Use AWS KMS for encryption and enforce HTTPS for S3 access"
+          }
+        ],
+        "confidence": "medium",
+        "validation_notes": "",
+        "challenged": false,
+        "challenge_resolution": null
+      },
+      {
+        "path_name": "API Gateway Exploitation",
+        "status": "partially_valid",
+        "challenged_steps": [
+          {
+            "kill_chain_phase": "Initial Access",
+            "step_challenged": 1,
+            "challenge_reason": "AWS WAF configured with rules to block authentication bypass attempts would prevent unauthenticated API access as described in the mitigation.",
+            "revised_feasibility_score": 4
+          },
+          {
+            "kill_chain_phase": "Execution",
+            "step_challenged": 2,
+            "challenge_reason": "Lambda functions with AWS Code Signing configured would reject unsigned code injection attempts, blocking malicious code deployment.",
+            "revised_feasibility_score": 5
+          }
+        ],
+        "mitigations": [
+          {
+            "mitigation_id": "M1050",
+            "mitigation_name": "Exploit Protection",
+            "description": "Regularly update and scan API configurations",
+            "aws_service_action": "Use AWS WAF for request filtering and enable AWS Shield for DDoS protection"
+          },
+          {
+            "mitigation_id": "M1035",
+            "mitigation_name": "Privileged Session Management",
+            "description": "Monitor and log all Lambda function executions",
+            "aws_service_action": "Enable AWS CloudWatch Logs for Lambda and use AWS Code Signing for integrity checks"
+          }
+        ],
+        "confidence": "medium",
+        "validation_notes": "",
+        "challenged": false,
+        "challenge_resolution": null
+      },
+      {
+        "path_name": "CloudTrail Log Tampering",
+        "status": "partially_valid",
+        "challenged_steps": [
+          {
+            "kill_chain_phase": "Initial Access",
+            "step_challenged": 1,
+            "challenge_reason": "MFA enforcement for CloudTrail access (as per mitigation) would block unauthorized access to CloudTrail logs using stolen credentials.",
+            "revised_feasibility_score": 4
+          },
+          {
+            "kill_chain_phase": "Execution",
+            "step_challenged": 2,
+            "challenge_reason": "CloudTrail logs stored in S3 with AWS Macie enabled would detect and alert on log file tampering attempts, preventing successful modification.",
+            "revised_feasibility_score": 5
+          }
+        ],
+        "mitigations": [
+          {
+            "mitigation_id": "M1026",
+            "mitigation_name": "Privileged Account Management",
+            "description": "Enforce MFA and use IAM Access Analyzer to monitor access",
+            "aws_service_action": "Enforce MFA for all users and configure AWS IAM Access Analyzer"
+          },
+          {
+            "mitigation_id": "M1040",
+            "mitigation_name": "User Training",
+            "description": "Implement log integrity checks and monitoring",
+            "aws_service_action": "Enable AWS CloudTrail logging to S3 and use AWS Macie for data classification"
+          }
+        ],
+        "confidence": "medium",
+        "validation_notes": "",
+        "challenged": false,
+        "challenge_resolution": null
+      }
+    ],
+    "executive_summary": "",
+    "execution_time_seconds": 963.4,
+    "error": null
+  }
+}

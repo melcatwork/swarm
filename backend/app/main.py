@@ -69,7 +69,7 @@ async def startup_validation():
         else:
             logger.info(
                 f"AWS Bedrock configured with model: {settings.BEDROCK_MODEL} "
-                f"in region: {settings.AWS_REGION_NAME}"
+                f"in region: {settings.AWS_REGION}"
             )
 
     elif settings.LLM_PROVIDER == "anthropic":

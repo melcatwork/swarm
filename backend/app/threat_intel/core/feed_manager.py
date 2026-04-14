@@ -8,6 +8,7 @@ from typing import Dict, List
 
 import yaml
 
+from app.utils.timezone import now_gmt8
 from .models import ThreatIntelItem, SourceConfig, FeedStatus
 from ..adapters.base_adapter import BaseAdapter
 
@@ -237,7 +238,7 @@ class FeedManager:
 
                     status = FeedStatus(
                         source_name=source_config.name,
-                        last_fetch=datetime.now(timezone.utc) if is_healthy else None,
+                        last_fetch=now_gmt8() if is_healthy else None,
                         item_count=0,  # Would need to track this separately
                         healthy=is_healthy,
                         error=None if is_healthy else "Health check failed",

@@ -11,6 +11,8 @@ from enum import Enum
 from typing import Dict, Any, Optional
 from threading import Lock
 
+from app.utils.timezone import now_gmt8
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +26,7 @@ class JobStatus(str, Enum):
     MITIGATIONS = "mitigations"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class Job:
@@ -35,11 +38,12 @@ class Job:
         self.status = JobStatus.PENDING
         self.progress_percent = 0
         self.current_phase = ""
-        self.started_at = datetime.now(timezone.utc).isoformat()
+        self.started_at = now_gmt8().isoformat()
         self.completed_at: Optional[str] = None
         self.result: Optional[Dict[str, Any]] = None
         self.error: Optional[str] = None
         self.logs: list[str] = []
+        self.cancelled = False  # Flag to check if job should be cancelled
 
     def update_status(self, status: JobStatus, progress: int, phase: str = ""):
         """Update job status and progress."""
@@ -48,24 +52,36 @@ class Job:
         self.current_phase = phase
         log_msg = f"[{self.job_id[:8]}] {status.value}: {phase} ({progress}%)"
         logger.info(log_msg)
-        self.logs.append(f"{datetime.now(timezone.utc).isoformat()} - {log_msg}")
+        self.logs.append(f"{now_gmt8().isoformat()} - {log_msg}")
 
     def complete(self, result: Dict[str, Any]):
         """Mark job as completed with results."""
         self.status = JobStatus.COMPLETED
         self.progress_percent = 100
-        self.completed_at = datetime.now(timezone.utc).isoformat()
+        self.completed_at = now_gmt8().isoformat()
         self.result = result
         logger.info(f"[{self.job_id[:8]}] Job completed successfully")
-        self.logs.append(f"{datetime.now(timezone.utc).isoformat()} - Completed successfully")
+        self.logs.append(f"{now_gmt8().isoformat()} - Completed successfully")
 
     def fail(self, error: str):
         """Mark job as failed with error message."""
         self.status = JobStatus.FAILED
-        self.completed_at = datetime.now(timezone.utc).isoformat()
+        self.completed_at = now_gmt8().isoformat()
         self.error = error
         logger.error(f"[{self.job_id[:8]}] Job failed: {error}")
-        self.logs.append(f"{datetime.now(timezone.utc).isoformat()} - Failed: {error}")
+        self.logs.append(f"{now_gmt8().isoformat()} - Failed: {error}")
+
+    def cancel(self):
+        """Mark job as cancelled by user."""
+        self.cancelled = True
+        self.status = JobStatus.CANCELLED
+        self.completed_at = now_gmt8().isoformat()
+        logger.info(f"[{self.job_id[:8]}] Job cancelled by user")
+        self.logs.append(f"{now_gmt8().isoformat()} - Cancelled by user")
+
+    def is_cancelled(self) -> bool:
+        """Check if job has been cancelled."""
+        return self.cancelled
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert job to dictionary for API response."""
@@ -141,11 +157,42 @@ class JobTracker:
             if job:
                 job.fail(error)
 
+    def cancel_job(self, job_id: str) -> bool:
+        """
+        Cancel a running job.
+
+        Args:
+            job_id: Job ID to cancel
+
+        Returns:
+            True if job was cancelled, False if job not found or already completed
+        """
+        with self.lock:
+            job = self.jobs.get(job_id)
+            if not job:
+                logger.warning(f"Cannot cancel job {job_id[:8]}: not found")
+                return False
+
+            # Can only cancel jobs that are still running
+            if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+                logger.warning(f"Cannot cancel job {job_id[:8]}: already {job.status.value}")
+                return False
+
+            job.cancel()
+            logger.info(f"Cancelled job {job_id[:8]}")
+            return True
+
+    def is_job_cancelled(self, job_id: str) -> bool:
+        """Check if a job has been cancelled."""
+        with self.lock:
+            job = self.jobs.get(job_id)
+            return job.is_cancelled() if job else False
+
     def _cleanup_old_jobs(self):
-        """Remove oldest completed/failed jobs when limit exceeded."""
+        """Remove oldest completed/failed/cancelled jobs when limit exceeded."""
         completed_jobs = [
             (job_id, job) for job_id, job in self.jobs.items()
-            if job.status in [JobStatus.COMPLETED, JobStatus.FAILED]
+            if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]
         ]
 
         if completed_jobs:

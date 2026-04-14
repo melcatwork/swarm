@@ -13,6 +13,7 @@ from typing import List, Optional, Dict, Any
 from uuid import uuid4
 
 from app.models.archived_run import ArchivedRun, ArchivedRunMetadata, ArchivedRunList
+from app.utils.timezone import now_gmt8, now_gmt8_iso
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +55,14 @@ class ArchiveService:
         return ARCHIVE_DIR / f"{run_id}.json"
 
     def generate_run_id(self) -> str:
-        """Generate unique run ID with timestamp."""
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        """Generate unique run ID with timestamp (GMT+8)."""
+        timestamp = now_gmt8().strftime("%Y%m%d_%H%M%S")
         unique_id = str(uuid4())[:8]
         return f"run_{timestamp}_{unique_id}"
 
     def generate_default_name(self, file_name: str, mode: str) -> str:
-        """Generate default name for archived run."""
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        """Generate default name for archived run (GMT+8)."""
+        timestamp = now_gmt8().strftime("%Y-%m-%d %H:%M")
         file_base = Path(file_name).stem
         return f"TM Swarm Run - {file_base} - {timestamp}"
 
@@ -91,7 +92,7 @@ class ArchiveService:
         try:
             # Generate run ID and metadata
             run_id = self.generate_run_id()
-            created_at = datetime.utcnow().isoformat() + "Z"
+            created_at = now_gmt8_iso()
 
             # Extract file type
             file_type = Path(file_name).suffix
@@ -202,7 +203,7 @@ class ArchiveService:
 
             # Update metadata
             archived_run.metadata.name = new_name
-            archived_run.metadata.updated_at = datetime.utcnow().isoformat() + "Z"
+            archived_run.metadata.updated_at = now_gmt8_iso()
 
             # Save updated run
             run_file_path = self._get_run_file_path(run_id)
