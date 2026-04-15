@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Network, CheckCircle, TrendingUp, AlertCircle, Users } from 'lucide-react';
+import SharedAttackGraph from './SharedAttackGraph';
 import './StigmergicResultsView.css';
 
 const StigmergicResultsView = ({ results }) => {
@@ -20,7 +21,6 @@ const StigmergicResultsView = ({ results }) => {
     paths: true
   });
   const [expandedPaths, setExpandedPaths] = useState(new Set());
-  const [hoveredNode, setHoveredNode] = useState(null);
 
   if (!results) return null;
 
@@ -289,66 +289,9 @@ const StigmergicResultsView = ({ results }) => {
 
   // Section 3: SHARED GRAPH VISUALIZATION
   const renderSharedGraph = () => {
-    const nodes = shared_graph_snapshot.nodes || [];
-    const edges = shared_graph_snapshot.edges || [];
-
-    if (nodes.length === 0) {
+    if (!shared_graph_snapshot || !shared_graph_snapshot.nodes || shared_graph_snapshot.nodes.length === 0) {
       return null;
     }
-
-    // Simple force-directed layout calculation
-    const layoutNodes = () => {
-      const width = 800;
-      const height = 600;
-      const centerX = width / 2;
-      const centerY = height / 2;
-
-      // Position nodes in a circular layout by kill chain phase
-      const phaseOrder = [
-        'Reconnaissance',
-        'Initial Access',
-        'Execution & Persistence',
-        'Lateral Movement & Privilege Escalation',
-        'Objective (Exfiltration/Impact)',
-        'Covering Tracks'
-      ];
-
-      const nodesByPhase = {};
-      nodes.forEach(node => {
-        const phase = node.kill_chain_phase || 'Unknown';
-        if (!nodesByPhase[phase]) nodesByPhase[phase] = [];
-        nodesByPhase[phase].push(node);
-      });
-
-      const positioned = [];
-      let phaseIndex = 0;
-
-      Object.keys(nodesByPhase).forEach(phase => {
-        const phaseNodes = nodesByPhase[phase];
-        const angleStep = (2 * Math.PI) / phaseNodes.length;
-        const radius = 150 + (phaseIndex * 60);
-
-        phaseNodes.forEach((node, idx) => {
-          const angle = idx * angleStep;
-          positioned.push({
-            ...node,
-            x: centerX + radius * Math.cos(angle),
-            y: centerY + radius * Math.sin(angle),
-            radius: Math.max(5, Math.min(20, node.pheromone_strength * 8))
-          });
-        });
-
-        phaseIndex++;
-      });
-
-      return positioned;
-    };
-
-    const positionedNodes = layoutNodes();
-    const nodeMap = {};
-    positionedNodes.forEach(node => {
-      nodeMap[node.node_id] = node;
-    });
 
     return (
       <div className="stigmergic-section">
@@ -361,108 +304,19 @@ const StigmergicResultsView = ({ results }) => {
         </div>
 
         {expandedSections.graph && (
-          <div className="graph-container">
-            <div className="graph-legend">
-              <div className="legend-item">
-                <div className="legend-indicator" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#64748b' }} />
-                <span>Node size = pheromone strength</span>
-              </div>
-              <div className="legend-item">
-                <div className="legend-indicator" style={{ width: '20px', height: '2px', backgroundColor: '#94a3b8' }} />
-                <span>Edge thickness = reinforcement</span>
-              </div>
-            </div>
-
-            <svg className="graph-svg" viewBox="0 0 800 600">
-              {/* Render edges */}
-              <g className="edges">
-                {edges.map((edge, idx) => {
-                  const source = nodeMap[edge.source_node_id];
-                  const target = nodeMap[edge.target_node_id];
-                  if (!source || !target) return null;
-
-                  const strokeWidth = Math.max(1, Math.min(4, edge.times_reinforced + 1));
-
-                  return (
-                    <line
-                      key={idx}
-                      x1={source.x}
-                      y1={source.y}
-                      x2={target.x}
-                      y2={target.y}
-                      stroke="#cbd5e1"
-                      strokeWidth={strokeWidth}
-                      opacity={0.6}
-                    />
-                  );
-                })}
-              </g>
-
-              {/* Render nodes */}
-              <g className="nodes">
-                {positionedNodes.map((node, idx) => {
-                  const phaseColor = getKillChainPhaseColor(node.kill_chain_phase);
-                  const isHovered = hoveredNode === node.node_id;
-
-                  return (
-                    <g
-                      key={idx}
-                      onMouseEnter={() => setHoveredNode(node.node_id)}
-                      onMouseLeave={() => setHoveredNode(null)}
-                    >
-                      <circle
-                        cx={node.x}
-                        cy={node.y}
-                        r={node.radius}
-                        fill={phaseColor.bg}
-                        stroke={phaseColor.border}
-                        strokeWidth={isHovered ? 3 : 2}
-                        opacity={isHovered ? 1 : 0.8}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      {isHovered && (
-                        <g>
-                          <rect
-                            x={node.x + 15}
-                            y={node.y - 30}
-                            width="200"
-                            height="80"
-                            fill="white"
-                            stroke="#cbd5e1"
-                            strokeWidth="1"
-                            rx="4"
-                            filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))"
-                          />
-                          <text x={node.x + 25} y={node.y - 10} fontSize="12" fontWeight="600">
-                            {node.technique_id}
-                          </text>
-                          <text x={node.x + 25} y={node.y + 5} fontSize="10" fill="#64748b">
-                            Asset: {node.asset_id.slice(0, 20)}...
-                          </text>
-                          <text x={node.x + 25} y={node.y + 20} fontSize="10" fill="#64748b">
-                            By: {node.deposited_by}
-                          </text>
-                          <text x={node.x + 25} y={node.y + 35} fontSize="10" fill="#64748b">
-                            Pheromone: {node.pheromone_strength.toFixed(2)}
-                          </text>
-                          <text x={node.x + 25} y={node.y + 50} fontSize="10" fill="#64748b">
-                            Reinforced: {node.times_reinforced}×
-                          </text>
-                        </g>
-                      )}
-                    </g>
-                  );
-                })}
-              </g>
-            </svg>
-
-            <div className="graph-stats">
-              <span>{nodes.length} nodes</span>
-              <span>•</span>
-              <span>{edges.length} edges</span>
-              <span>•</span>
-              <span>{nodes.filter(n => n.times_reinforced > 0).length} reinforced</span>
-            </div>
+          <div style={{
+            width: '100%',
+            minHeight: 600,
+            position: 'relative',
+            padding: 0,
+            margin: 0,
+            boxSizing: 'border-box',
+          }}>
+            <SharedAttackGraph
+              data={shared_graph_snapshot}
+              coverageGaps={emergent_insights?.coverage_gaps || []}
+              convergentPaths={emergent_insights?.convergent_paths || []}
+            />
           </div>
         )}
       </div>

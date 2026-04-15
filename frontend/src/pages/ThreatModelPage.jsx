@@ -801,6 +801,55 @@ function ThreatModelPage() {
         {/* Main Content */}
         <div className="main-content">
 
+      {/* Landing State - Show when no results yet */}
+      {!result && !running && (
+        <div className="landing-state">
+          <div className="landing-card">
+            <Upload size={48} className="landing-icon" />
+            <h3>Welcome to Swarm Threat Modeling</h3>
+            <p className="landing-description">
+              Upload your Infrastructure-as-Code file to begin AI-powered threat analysis.
+              Our multi-agent system will explore, evaluate, and validate attack paths against your infrastructure.
+            </p>
+
+            <div className="landing-steps">
+              <div className="landing-step">
+                <div className="step-number">1</div>
+                <div className="step-content">
+                  <h4>Upload IaC File</h4>
+                  <p>Upload a Terraform (.tf) or CloudFormation (.yaml/.json) file describing your AWS infrastructure</p>
+                </div>
+              </div>
+
+              <div className="landing-step">
+                <div className="step-number">2</div>
+                <div className="step-content">
+                  <h4>Choose Analysis Mode</h4>
+                  <p>Multi-agents Run (all agents, ~10min) for comprehensive analysis, 2 agents test (~5min) for rapid testing, or single agent run (1 agent, ~3-5min) for focused analysis</p>
+                </div>
+              </div>
+
+              <div className="landing-step">
+                <div className="step-number">3</div>
+                <div className="step-content">
+                  <h4>Review Results</h4>
+                  <p>Explore validated attack paths with scores, MITRE ATT&CK mappings, and actionable mitigations</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="landing-requirements">
+              <h4>Requirements:</h4>
+              <ul>
+                <li>File must be &lt; 1MB</li>
+                <li>Supported formats: .tf, .yaml, .yml, .json</li>
+                <li>LLM provider must be configured (check backend status)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Section A: Upload Panel */}
       <div className="upload-panel">
         <h3>Upload Infrastructure-as-Code</h3>
@@ -2159,55 +2208,6 @@ function ThreatModelPage() {
       )}
         </div> {/* Close main-content */}
       </div> {/* Close page-content-with-sidebar */}
-
-      {/* Landing State - Show when no file has been uploaded */}
-      {!result && !running && !selectedFile && (
-        <div className="landing-state">
-          <div className="landing-card">
-            <Upload size={48} className="landing-icon" />
-            <h3>Welcome to Swarm Threat Modeling</h3>
-            <p className="landing-description">
-              Upload your Infrastructure-as-Code file to begin AI-powered threat analysis.
-              Our multi-agent system will explore, evaluate, and validate attack paths against your infrastructure.
-            </p>
-
-            <div className="landing-steps">
-              <div className="landing-step">
-                <div className="step-number">1</div>
-                <div className="step-content">
-                  <h4>Upload IaC File</h4>
-                  <p>Upload a Terraform (.tf) or CloudFormation (.yaml/.json) file describing your AWS infrastructure</p>
-                </div>
-              </div>
-
-              <div className="landing-step">
-                <div className="step-number">2</div>
-                <div className="step-content">
-                  <h4>Choose Analysis Mode</h4>
-                  <p>Multi-agents Run (all agents, ~10min) for comprehensive analysis, 2 agents test (~5min) for rapid testing, or single agent run (1 agent, ~3-5min) for focused analysis</p>
-                </div>
-              </div>
-
-              <div className="landing-step">
-                <div className="step-number">3</div>
-                <div className="step-content">
-                  <h4>Review Results</h4>
-                  <p>Explore validated attack paths with scores, MITRE ATT&CK mappings, and actionable mitigations</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="landing-requirements">
-              <h4>Requirements:</h4>
-              <ul>
-                <li>File must be &lt; 1MB</li>
-                <li>Supported formats: .tf, .yaml, .yml, .json</li>
-                <li>LLM provider must be configured (check backend status)</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

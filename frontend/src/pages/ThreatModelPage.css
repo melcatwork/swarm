@@ -1573,13 +1573,10 @@
    ============================================================================= */
 
 .landing-state {
-  display: flex;
-  justify-content: center;
-  padding: 2rem 0;
+  margin-bottom: 1.5rem;
 }
 
 .landing-card {
-  max-width: 800px;
   background-color: white;
   border-radius: 12px;
   padding: 3rem;
@@ -2406,7 +2403,7 @@
 }
 
 .archived-runs-sidebar {
-  flex: 0 0 320px;
+  flex: 0 0 420px;
   background-color: white;
   border-radius: 8px;
   border: 1px solid #e2e8f0;

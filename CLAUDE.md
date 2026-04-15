@@ -8,6 +8,38 @@ AI-powered threat modeling platform using CrewAI multi-agent swarm intelligence 
 
 ## Recent Changes (2026-04-15)
 
+### ✅ React Flow Migration for Shared Attack Graph
+- **Complete rewrite of SharedAttackGraph component** using React Flow library instead of raw SVG/D3
+- Fixed critical rendering issues: swim lane misalignment on zoom/pan, invisible arrows, broken animations
+- **Frontend changes**:
+  - `frontend/src/components/SharedAttackGraph.jsx` — Completely rebuilt with React Flow (NEW IMPLEMENTATION)
+  - `frontend/package.json` — Added reactflow@11.11.4 dependency
+  - `frontend/src/components/StigmergicResultsView.jsx` — Replaced inline SVG graph with SharedAttackGraph component import
+- **Key architectural changes**:
+  - **Swim lanes as React Flow nodes**: Lane backgrounds and labels now render as custom `LaneNode` components inside the React Flow canvas, ensuring they move and scale correctly with zoom/pan
+  - **Custom node types**: `AttackNode` (technique circles) and `LaneNode` (swim lane backgrounds) defined at module level for stable references
+  - **Proper edge rendering**: Fixed arrow markers using `MarkerType.ArrowClosed` with validated color strings, changed edge type from 'smoothstep' to 'default' (bezier) for better cross-lane routing
+  - **Handle positioning**: Changed from Top/Bottom to Left/Right positioning for cleaner horizontal edge routing between vertically-stacked swim lanes
+  - **Valid edge filtering**: Added `validNodeIds` check to filter out edges referencing non-existent nodes before rendering
+- **Layout algorithm**:
+  - Horizontal swim lane layout with 5 kill chain phases (Initial Access, Execution, Lateral Movement, Objective, Covering Tracks)
+  - Nodes positioned by incoming edge count (more central nodes positioned left)
+  - Vertical staggering for dense lanes to reduce overlap
+  - Lane dimensions: 1600px width × 200px height per lane
+- **Features preserved**:
+  - Path traversal animation: Click any node to trace all attack paths through it with hop-by-hop animated reveal (500ms intervals)
+  - Node dimming: Off-path nodes fade to 12% opacity, path nodes stay at 100% opacity with highlight rings
+  - Edge animation: Edges with 2+ reinforcements show React Flow's built-in flowing dash animation
+  - Interactive controls: Zoom, pan, minimap, fit view, drag nodes
+  - Legend, info bar, coverage gaps sections unchanged
+- **Debug logging**: Added `[SAG]` console logs for troubleshooting edge rendering (nodes count, edges count, sample edge structure, valid node IDs)
+- **Benefits**:
+  - ✅ Swim lanes now move and scale correctly with zoom/pan (no misalignment)
+  - ✅ Arrows visible with proper markers at target end
+  - ✅ Robust rendering using battle-tested React Flow library
+  - ✅ Better performance for large graphs
+  - ✅ Built-in controls (zoom, pan, minimap) with no custom implementation needed
+
 ### ✅ Stigmergic Multi-Agent Swarm Implementation
 - Added fourth pipeline mode: **Stigmergic Swarm** with shared graph coordination
 - Agents build on each other's discoveries through reinforced technique nodes

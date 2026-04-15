@@ -400,6 +400,33 @@
    Graph Visualization Section
    ============================================================================= */
 
+.graph-interpretation {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.graph-interpretation h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e40af;
+  margin: 0 0 0.5rem 0;
+}
+
+.graph-interpretation p {
+  font-size: 0.875rem;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.graph-interpretation strong {
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
 .graph-container {
   padding: 1.5rem;
 }

@@ -20,13 +20,13 @@ sources:
     stix_url: https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json
 - name: News4Hackers
   adapter: hackernews_rss
-  enabled: true
+  enabled: false
   refresh_minutes: 30
   config:
     feed_url: https://www.news4hackers.com/feed/
 - name: SecurityWeek
   adapter: hackernews_rss
-  enabled: true
+  enabled: false
   refresh_minutes: 30
   config:
     feed_url: https://www.securityweek.com/feed/
@@ -56,7 +56,7 @@ sources:
     feed_url: https://cybersecuritynews.com/feed/
 - name: CSO Online
   adapter: hackernews_rss
-  enabled: true
+  enabled: false
   refresh_minutes: 30
   config:
     feed_url: https://www.csoonline.com/feed/
