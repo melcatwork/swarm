@@ -246,6 +246,19 @@ function ThreatIntelPage() {
         )}
       </div>
 
+      {/* News Score Definition */}
+      <div className="score-definition-section">
+        <h3>News Score Definition</h3>
+        <p className="score-formula">
+          Score (0-10) = Normalized[(Base × Severity × Recency) + Cross-Source Bonus]
+        </p>
+        <ul className="score-details">
+          <li><strong>Severity:</strong> Critical=5×, High=3×, Medium=1.5×, Low=0.5×, Info=0.2×</li>
+          <li><strong>Recency:</strong> Today=3×, Yesterday=2×, This Week=1×, Older=0.5×</li>
+          <li><strong>Cross-Source:</strong> +2.0 per additional source citing same CVE/topic</li>
+        </ul>
+      </div>
+
       <SourceManager />
     </div>
   );

@@ -141,7 +141,7 @@ class HackerNewsRssAdapter(BaseAdapter):
                 id=entry_id,
                 title=title,
                 summary=summary,
-                source="The Hacker News",
+                source=self.get_name(),
                 url=link,
                 published=published,
                 category=category,

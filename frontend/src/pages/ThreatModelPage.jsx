@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save, StopCircle, Settings, Key } from 'lucide-react';
+import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save, StopCircle, Settings, Network } from 'lucide-react';
 import Toast from '../components/Toast';
-import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels, checkHealth, cancelRun, configureBedrockCredentials } from '../api/client';
+import StigmergicResultsView from '../components/StigmergicResultsView';
+import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, uploadAndRunStigmergic, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels, checkHealth, cancelRun } from '../api/client';
 import { formatGMT8DateShort, formatGMT8Time } from '../utils/formatters';
 import './ThreatModelPage.css';
 
@@ -17,6 +18,7 @@ function ThreatModelPage() {
   const [expandedPaths, setExpandedPaths] = useState(new Set());
   const [personas, setPersonas] = useState({});
   const [selectedAgent, setSelectedAgent] = useState('apt29_cozy_bear');
+  const [executionOrder, setExecutionOrder] = useState('capability_ascending'); // For stigmergic swarm
   const [heartbeat, setHeartbeat] = useState(0);
   const [backendAlive, setBackendAlive] = useState(true);
   const [lastBackendCheck, setLastBackendCheck] = useState(null);
@@ -38,14 +40,6 @@ function ThreatModelPage() {
 
   // Cancel token for aborting requests
   const [cancelTokenSource, setCancelTokenSource] = useState(null);
-
-  // Bedrock configuration state
-  const [showBedrockConfig, setShowBedrockConfig] = useState(false);
-  const [bedrockConfig, setBedrockConfig] = useState({
-    aws_bearer_token: '',
-    aws_region: 'us-east-1'
-  });
-  const [configuringBedrock, setConfiguringBedrock] = useState(false);
 
   // Helper function to format execution time
   const formatExecutionTime = (seconds) => {
@@ -215,7 +209,27 @@ function ThreatModelPage() {
   const handleLoadArchivedRun = async (runId) => {
     try {
       const data = await getArchivedRun(runId);
-      setResult(data.result);
+
+      // Normalize stigmergic archived runs to match expected result structure
+      let resultData = data.result;
+      if (resultData.run_type === 'multi_agents_swarm') {
+        resultData = {
+          ...resultData,
+          final_paths: resultData.attack_paths || [],
+          executive_summary: `Stigmergic swarm exploration completed with ${resultData.personas_used?.length || 0} agents. ` +
+            `Discovered ${resultData.attack_paths?.length || 0} attack paths with ` +
+            `${resultData.shared_graph_snapshot?.statistics?.reinforced_nodes || 0} reinforced techniques ` +
+            `(high-confidence paths validated by multiple agents). ` +
+            `Execution order: ${resultData.execution_order}.`,
+          adversarial_summary: {
+            coverage_estimate: resultData.emergent_insights?.summary?.coverage_percentage
+              ? `${resultData.emergent_insights.summary.coverage_percentage.toFixed(1)}%`
+              : 'N/A'
+          }
+        };
+      }
+
+      setResult(resultData);
       setSelectedMitigations({});
       setPostMitigationAnalysis(null);
       setViewMode('pre');
@@ -334,6 +348,8 @@ function ThreatModelPage() {
         data = await uploadAndRunQuick(selectedFile, selectedModel, source.token);
       } else if (mode === 'single') {
         data = await uploadAndRunSingleAgent(selectedFile, selectedAgent, selectedModel, source.token);
+      } else if (mode === 'stigmergic') {
+        data = await uploadAndRunStigmergic(selectedFile, executionOrder, selectedModel, source.token);
       } else {
         data = await uploadAndRunSwarm(selectedFile, selectedModel, source.token);
       }
@@ -341,10 +357,39 @@ function ThreatModelPage() {
       clearInterval(phaseInterval);
 
       if (data.status === 'ok') {
-        setResult(data);
-        const agentInfo = mode === 'single' ? ` using ${personas[selectedAgent]?.display_name || selectedAgent}` : '';
+        // Normalize stigmergic response to match expected result structure
+        if (mode === 'stigmergic') {
+          const normalizedData = {
+            ...data,
+            final_paths: data.attack_paths || [],
+            executive_summary: `Stigmergic swarm exploration completed with ${data.personas_used?.length || 0} agents. ` +
+              `Discovered ${data.attack_paths?.length || 0} attack paths with ` +
+              `${data.shared_graph_snapshot?.statistics?.reinforced_nodes || 0} reinforced techniques ` +
+              `(high-confidence paths validated by multiple agents). ` +
+              `Execution order: ${data.execution_order}.`,
+            adversarial_summary: {
+              coverage_estimate: data.emergent_insights?.summary?.coverage_percentage
+                ? `${data.emergent_insights.summary.coverage_percentage.toFixed(1)}%`
+                : 'N/A'
+            }
+          };
+          setResult(normalizedData);
+        } else {
+          setResult(data);
+        }
+
+        let message;
+        if (mode === 'stigmergic') {
+          const pathCount = data.attack_paths?.length || 0;
+          const reinforcedCount = data.shared_graph_snapshot?.statistics?.reinforced_nodes || 0;
+          message = `Stigmergic swarm complete! Found ${pathCount} attack paths with ${reinforcedCount} reinforced techniques.`;
+        } else {
+          const agentInfo = mode === 'single' ? ` using ${personas[selectedAgent]?.display_name || selectedAgent}` : '';
+          const pathCount = data.final_paths?.length || data.attack_paths?.length || 0;
+          message = `Threat model complete${agentInfo}! Found ${pathCount} attack paths.`;
+        }
         setToast({
-          message: `Threat model complete${agentInfo}! Found ${data.final_paths.length} attack paths.`,
+          message: message,
           type: 'success'
         });
       } else {
@@ -394,44 +439,6 @@ function ThreatModelPage() {
         message: 'Error cancelling operation',
         type: 'error'
       });
-    }
-  };
-
-  const handleConfigureBedrock = async () => {
-    if (!bedrockConfig.aws_bearer_token) {
-      setToast({
-        message: 'Please enter your AWS Bedrock bearer token',
-        type: 'error'
-      });
-      return;
-    }
-
-    try {
-      setConfiguringBedrock(true);
-      const result = await configureBedrockCredentials(bedrockConfig);
-
-      setToast({
-        message: `AWS Bedrock configured successfully! ${result.available_models.length} models available.`,
-        type: 'success'
-      });
-
-      // Refresh available models
-      fetchAvailableModels();
-
-      // Clear form and hide
-      setBedrockConfig({
-        aws_bearer_token: '',
-        aws_region: 'us-east-1'
-      });
-      setShowBedrockConfig(false);
-    } catch (err) {
-      console.error('Failed to configure Bedrock:', err);
-      setToast({
-        message: `Failed to configure AWS Bedrock: ${err.message}`,
-        type: 'error'
-      });
-    } finally {
-      setConfiguringBedrock(false);
     }
   };
 
@@ -840,7 +847,7 @@ function ThreatModelPage() {
           </div>
         )}
 
-        {/* Agent Selection for Single Agent Test */}
+        {/* Agent Selection for single agent run */}
         <div className="agent-selection">
           <label htmlFor="agent-select" className="agent-label">
             <User size={16} />
@@ -901,76 +908,26 @@ function ThreatModelPage() {
           </p>
         </div>
 
-        {/* AWS Bedrock Configuration */}
-        <div className="bedrock-config-section">
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => setShowBedrockConfig(!showBedrockConfig)}
+        {/* Execution Order Selection (for Stigmergic Swarm) */}
+        <div className="agent-selection">
+          <label htmlFor="execution-order-select" className="agent-label">
+            <Network size={16} />
+            Execution Order (for Multi-agents swarm)
+          </label>
+          <select
+            id="execution-order-select"
+            value={executionOrder}
+            onChange={(e) => setExecutionOrder(e.target.value)}
             disabled={running}
-            style={{ marginBottom: '1rem' }}
+            className="agent-select"
           >
-            <Key size={16} />
-            {showBedrockConfig ? 'Hide' : 'Configure'} AWS Bedrock Credentials
-          </button>
-
-          {showBedrockConfig && (
-            <div className="bedrock-config-form">
-              <h4 style={{ fontSize: '1rem', marginBottom: '1rem', color: '#1a1a2e' }}>
-                AWS Bedrock Configuration
-              </h4>
-              <div className="form-group">
-                <label htmlFor="aws-bearer-token">AWS Bedrock Bearer Token</label>
-                <input
-                  id="aws-bearer-token"
-                  type="password"
-                  value={bedrockConfig.aws_bearer_token}
-                  onChange={(e) => setBedrockConfig({ ...bedrockConfig, aws_bearer_token: e.target.value })}
-                  disabled={configuringBedrock}
-                  placeholder="Enter your AWS Bedrock bearer token"
-                  className="form-input"
-                />
-                <p style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.25rem' }}>
-                  Your AWS Bedrock API bearer token for accessing Anthropic models
-                </p>
-              </div>
-              <div className="form-group">
-                <label htmlFor="aws-region">AWS Region</label>
-                <select
-                  id="aws-region"
-                  value={bedrockConfig.aws_region}
-                  onChange={(e) => setBedrockConfig({ ...bedrockConfig, aws_region: e.target.value })}
-                  disabled={configuringBedrock}
-                  className="form-input"
-                >
-                  <option value="us-east-1">US East (N. Virginia) - us-east-1</option>
-                  <option value="us-west-2">US West (Oregon) - us-west-2</option>
-                  <option value="ap-southeast-1">Asia Pacific (Singapore) - ap-southeast-1</option>
-                  <option value="ap-northeast-1">Asia Pacific (Tokyo) - ap-northeast-1</option>
-                  <option value="eu-central-1">Europe (Frankfurt) - eu-central-1</option>
-                  <option value="eu-west-1">Europe (Ireland) - eu-west-1</option>
-                </select>
-              </div>
-              <div className="form-actions">
-                <button
-                  className="btn btn-primary"
-                  onClick={handleConfigureBedrock}
-                  disabled={configuringBedrock}
-                >
-                  {configuringBedrock ? 'Configuring...' : 'Save & Apply'}
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowBedrockConfig(false)}
-                  disabled={configuringBedrock}
-                >
-                  Cancel
-                </button>
-              </div>
-              <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
-                Your bearer token will be saved to .env file and used for accessing Anthropic models via AWS Bedrock.
-              </p>
-            </div>
-          )}
+            <option value="capability_ascending">Capability Ascending (least to most sophisticated)</option>
+            <option value="random">Random Order (reduce bias)</option>
+            <option value="threat_actor_first">Threat Actor First (real actors before archetypes)</option>
+          </select>
+          <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', marginBottom: 0 }}>
+            Determines the order in which agents explore the infrastructure for stigmergic swarm runs
+          </p>
         </div>
 
         <div className="run-buttons">
@@ -980,7 +937,7 @@ function ThreatModelPage() {
             disabled={!selectedFile || running}
           >
             <Play size={16} />
-            {running && currentPhase ? currentPhase : 'Run Full Swarm (All agents)'}
+            {running && currentPhase ? currentPhase : 'Multi-agents Run'}
           </button>
           <button
             className="btn btn-secondary"
@@ -988,7 +945,7 @@ function ThreatModelPage() {
             disabled={!selectedFile || running}
           >
             <Zap size={16} />
-            Quick Run (2 agents)
+            2 agents test
           </button>
           <button
             className="btn btn-secondary"
@@ -996,7 +953,17 @@ function ThreatModelPage() {
             disabled={!selectedFile || running || !selectedAgent}
           >
             <User size={16} />
-            Single Agent Test
+            single agent run
+          </button>
+          <button
+            className="btn btn-stigmergic"
+            onClick={() => runSwarm('stigmergic')}
+            disabled={!selectedFile || running}
+            title="Stigmergic shared graph — agents build on each other's discoveries"
+          >
+            <Network size={16} />
+            Multi-agents swarm Run
+            <span className="badge-new">NEW</span>
           </button>
           {running && (
             <button
@@ -1125,7 +1092,13 @@ function ThreatModelPage() {
       )}
 
       {/* Section C: Results View */}
-      {result && result.final_paths && (
+      {/* Stigmergic Results View */}
+      {result && result.run_type === 'multi_agents_swarm' && (
+        <StigmergicResultsView results={result} />
+      )}
+
+      {/* Standard Results View */}
+      {result && result.run_type !== 'multi_agents_swarm' && result.final_paths && (
         <div className="results-panel">
           {/* Executive Summary */}
           {result.executive_summary && (
@@ -2211,7 +2184,7 @@ function ThreatModelPage() {
                 <div className="step-number">2</div>
                 <div className="step-content">
                   <h4>Choose Analysis Mode</h4>
-                  <p>Run full swarm (all agents, ~10min) for comprehensive analysis, quick mode (2 agents, ~5min) for rapid testing, or single agent test (1 agent, ~3-5min) for focused analysis</p>
+                  <p>Multi-agents Run (all agents, ~10min) for comprehensive analysis, 2 agents test (~5min) for rapid testing, or single agent run (1 agent, ~3-5min) for focused analysis</p>
                 </div>
               </div>
 

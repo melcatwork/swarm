@@ -43,7 +43,8 @@ class CitationScorer:
         - Severity weight: critical=5.0, high=3.0, medium=1.5, low=0.5, info=0.2
         - Recency weight: today=3.0, yesterday=2.0, this week=1.0, older=0.5
         - Cross-source bonus: +2.0 per item sharing same CVEs or similar title
-        - Final score = (base * severity * recency) + cross_source_bonus
+        - Raw score = (base * severity * recency) + cross_source_bonus
+        - Final score: normalized to 0-10 scale
 
         Args:
             items: List of ThreatIntelItem objects to score
@@ -56,8 +57,9 @@ class CitationScorer:
 
         logger.info(f"Scoring {len(items)} threat intelligence items")
 
-        # Calculate scores
+        # Calculate raw scores
         scored_items = []
+        raw_scores = []
         for item in items:
             try:
                 # Calculate severity weight
@@ -72,21 +74,35 @@ class CitationScorer:
                 # Calculate cross-source bonus
                 cross_source_bonus = self._calculate_cross_source_bonus(item, items)
 
-                # Calculate final score
-                citation_score = (
+                # Calculate raw score
+                raw_score = (
                     self.BASE_SCORE * severity_weight * recency_weight
                     + cross_source_bonus
                 )
 
-                # Update item with calculated score
-                item.citation_score = round(citation_score, 2)
+                raw_scores.append(raw_score)
                 scored_items.append(item)
 
             except Exception as e:
                 logger.error(f"Error scoring item {item.id}: {e}", exc_info=True)
                 # Add with default score
-                item.citation_score = self.BASE_SCORE
+                raw_scores.append(self.BASE_SCORE)
                 scored_items.append(item)
+
+        # Normalize scores to 0-10 scale
+        if raw_scores:
+            min_score = min(raw_scores)
+            max_score = max(raw_scores)
+
+            # If all scores are the same, set them all to 5.0
+            if max_score == min_score:
+                for item in scored_items:
+                    item.citation_score = 5.0
+            else:
+                # Normalize to 0-10 scale
+                for item, raw_score in zip(scored_items, raw_scores):
+                    normalized = 10.0 * (raw_score - min_score) / (max_score - min_score)
+                    item.citation_score = round(normalized, 1)
 
         # Sort by citation_score descending
         scored_items.sort(key=lambda x: x.citation_score, reverse=True)

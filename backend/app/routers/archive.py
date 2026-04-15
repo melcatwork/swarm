@@ -30,7 +30,7 @@ class SaveRunRequest(BaseModel):
 
     pipeline_result: Dict[str, Any] = Field(..., description="Complete pipeline result")
     file_name: str = Field(..., description="Original IaC file name")
-    mode: str = Field(..., description="Run mode: full, quick, or single")
+    mode: str = Field(..., description="Run mode: full, quick, single, or stigmergic")
     agent_name: str | None = Field(None, description="Agent name if single mode")
     custom_name: str | None = Field(None, description="Custom name for the run")
 

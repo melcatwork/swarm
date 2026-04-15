@@ -4,7 +4,59 @@ AI-powered threat modeling platform using CrewAI multi-agent swarm intelligence 
 
 **Repository**: https://github.com/redcountryroad/swarm-tm (private)
 **Status**: Production Ready ✅
-**Last Updated**: 2026-04-14
+**Last Updated**: 2026-04-15
+
+## Recent Changes (2026-04-15)
+
+### ✅ Stigmergic Multi-Agent Swarm Implementation
+- Added fourth pipeline mode: **Stigmergic Swarm** with shared graph coordination
+- Agents build on each other's discoveries through reinforced technique nodes
+- Sequential execution with configurable ordering strategies (capability ascending/descending, random)
+- **Backend changes**:
+  - `backend/app/swarm/shared_graph.py` — New SharedThreatGraph class for agent coordination (NEW FILE)
+  - `backend/app/swarm/swarm_exploration.py` — Stigmergic exploration orchestration logic (NEW FILE)
+  - `backend/app/routers/swarm.py` — Added POST /api/swarm/run/stigmergic endpoint with execution_order parameter
+- **Frontend changes**:
+  - `frontend/src/components/StigmergicResultsView.jsx` — New component for displaying stigmergic results with shared graph visualization (NEW FILE)
+  - `frontend/src/components/StigmergicResultsView.css` — Styling for stigmergic results view (NEW FILE)
+  - `frontend/src/api/client.js` — Added uploadAndRunStigmergic() function
+  - `frontend/src/pages/ThreatModelPage.jsx` — Added execution order selector, stigmergic run button, result normalization
+  - `frontend/src/pages/ThreatModelPage.css` — Added styling for execution order dropdown
+- **Features**:
+  - Emergent insights from cross-agent pattern detection
+  - Reinforced technique nodes show high-confidence attack vectors validated by multiple agents
+  - Execution order strategies: capability-based (ASC/DESC) or random
+  - Coverage percentage calculation for attack surface exploration
+  - Backward compatible with existing pipeline modes
+- See: `frontend/STIGMERGIC_RESULTS_INTEGRATION.md`
+
+### ✅ Threat Intelligence Enhancements
+- **Expanded sources from 3 to 13**: Added 10 new security news RSS feeds
+- **Normalized citation scoring**: All scores now on 0-10 scale using min-max normalization
+- **Added scoring documentation**: New "News Score Definition" section in UI explaining score calculation
+- **Backend changes**:
+  - `backend/app/threat_intel/config/sources.yaml` — Added News4Hackers, SecurityWeek, Dark Reading, Krebs on Security, BleepingComputer, Cybersecurity News, CSO Online, Threatpost, Ars Technica Security, Simon Willison
+  - `backend/app/threat_intel/core/scorer.py` — Implemented min-max normalization to 0-10 scale
+  - `backend/app/threat_intel/adapters/hackernews_rss.py` — Fixed source name to use dynamic self.get_name() instead of hardcoded "The Hacker News"
+- **Frontend changes**:
+  - `frontend/src/pages/ThreatIntelPage.jsx` — Added "News Score Definition" section with formula and scoring components
+  - `frontend/src/pages/ThreatIntelPage.css` — Added styling for score definition section with monospace formula display
+- **Features**:
+  - 13 total threat intel sources (1 CVE database, 11 security news feeds, 1 threat framework)
+  - Citation scores normalized: highest item = 10.0, lowest = 0.0, proportional scaling for others
+  - Clear documentation of scoring formula: (Base × Severity × Recency) + Cross-Source Bonus
+  - All new sources enabled by default with 30-minute refresh intervals
+
+### ✅ UI/UX Improvements
+- **Removed AWS Bedrock credentials configuration UI**: Simplified frontend by removing Bedrock config form from threat modeling page
+- **Renamed stigmergic header**: Changed "Phase 10: Stigmergic Swarm Exploration Results" to "Multi-agents Swarm Exploration Results" for clarity
+- **Frontend changes**:
+  - `frontend/src/pages/ThreatModelPage.jsx` — Removed Bedrock state variables, handler function, and configuration form section
+  - `frontend/src/components/StigmergicResultsView.jsx` — Updated header title to "Multi-agents Swarm Exploration Results"
+- **Impact**:
+  - Cleaner UI without credential management complexity
+  - More intuitive naming for stigmergic swarm feature
+  - Bedrock configuration now handled server-side via .env only
 
 ## Recent Changes (2026-04-14)
 

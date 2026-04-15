@@ -99,7 +99,8 @@ class ArchiveService:
 
             # Get execution time and paths count from result
             execution_time = pipeline_result.get("execution_time_seconds", 0)
-            paths_count = len(pipeline_result.get("final_paths", []))
+            # Handle both standard pipelines (final_paths) and stigmergic (attack_paths)
+            paths_count = len(pipeline_result.get("final_paths", pipeline_result.get("attack_paths", [])))
 
             # Generate name
             name = custom_name or self.generate_default_name(file_name, mode)

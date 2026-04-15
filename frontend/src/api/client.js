@@ -248,6 +248,36 @@ export const uploadAndRunSingleAgent = async (file, agentName, model = null, can
 };
 
 /**
+ * Upload IaC file and run stigmergic swarm exploration (Phase 10)
+ * @param {File} file - IaC file (.tf, .yaml, .yml, or .json)
+ * @param {string} executionOrder - Persona ordering strategy (capability_ascending, random, threat_actor_first)
+ * @param {string} model - Optional model name to use (e.g., "qwen3:14b", "gemma4:e4b")
+ * @returns {Promise<Object>} Stigmergic swarm results with attack paths, shared graph, emergent insights
+ * @throws {Error} With user-friendly message on failure
+ */
+export const uploadAndRunStigmergic = async (file, executionOrder = 'capability_ascending', model = null, cancelToken = null) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (model) {
+      formData.append('model', model);
+    }
+
+    const response = await apiClient.post(`/api/swarm/run/stigmergic?execution_order=${executionOrder}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 2400000, // 40 minutes for stigmergic swarm (sequential execution of multiple agents)
+      cancelToken: cancelToken, // Support request cancellation
+    });
+    return response.data;
+  } catch (error) {
+    const message = formatErrorMessage(error);
+    throw new Error(message);
+  }
+};
+
+/**
  * Get all available personas
  * @returns {Promise<Object>} Dictionary of personas
  */

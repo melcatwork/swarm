@@ -689,7 +689,7 @@ async def explore_infrastructure_quick(request: ExploreRequest):
 
     try:
         # Build threat intel context
-        logger.info("Building threat intelligence context (quick mode)")
+        logger.info("Building threat intelligence context (2 agents test mode)")
         threat_intel_context, intel_count = _build_threat_intel_context()
 
         # Temporarily save current persona states
@@ -701,7 +701,7 @@ async def explore_infrastructure_quick(request: ExploreRequest):
 
         try:
             # Disable all personas
-            logger.info("Temporarily configuring personas for quick mode")
+            logger.info("Temporarily configuring personas for 2 agents test mode")
             for name in original_states.keys():
                 registry.toggle_persona(name, False)
 
@@ -715,7 +715,7 @@ async def explore_infrastructure_quick(request: ExploreRequest):
 
             execution_time = time.time() - start_time
             logger.info(
-                f"Quick exploration completed in {execution_time:.2f}s: "
+                f"2 agents test exploration completed in {execution_time:.2f}s: "
                 f"{len(attack_paths)} attack paths from 2 agents"
             )
 
@@ -736,7 +736,7 @@ async def explore_infrastructure_quick(request: ExploreRequest):
 
     except Exception as e:
         execution_time = time.time() - start_time
-        logger.error(f"Quick exploration failed after {execution_time:.2f}s: {e}")
+        logger.error(f"2 agents test exploration failed after {execution_time:.2f}s: {e}")
 
         # Try to restore states on error
         try:
@@ -1134,7 +1134,7 @@ async def run_full_pipeline(
 
         # Phase 1: Parse IaC file
         logger.info("=" * 60)
-        logger.info("Starting Full Threat Modeling Pipeline")
+        logger.info("Starting Multi-agents Run Pipeline")
         logger.info(f"File: {file.filename}")
         logger.info("=" * 60)
         logger.info("Pipeline Phase 1: Parsing IaC file")
@@ -1303,7 +1303,7 @@ async def run_quick_pipeline(
     model: str = Form(None)
 ):
     """
-    Run a quick version of the threat modeling pipeline with reduced agents.
+    Run a 2 agents test version of the threat modeling pipeline with reduced agents.
 
     This endpoint runs the same three-layer pipeline as /run but uses only
     2 threat actor personas in the exploration phase for faster execution:
@@ -1358,10 +1358,10 @@ async def run_quick_pipeline(
 
         # Phase 1: Parse IaC file
         logger.info("=" * 60)
-        logger.info("Starting Quick Threat Modeling Pipeline (2 agents)")
+        logger.info("Starting 2 agents test Pipeline")
         logger.info(f"File: {file.filename}")
         logger.info("=" * 60)
-        logger.info("Quick Pipeline Phase 1: Parsing IaC file")
+        logger.info("2 agents test Phase 1: Parsing IaC file")
         asset_graph = await _parse_iac_file(file)
         asset_graph_dict = asset_graph.model_dump()
 
@@ -1369,16 +1369,16 @@ async def run_quick_pipeline(
         logger.info("Building threat intelligence context")
         threat_intel_context, intel_count = _build_threat_intel_context()
 
-        # Temporarily configure personas for quick mode
-        logger.info("Configuring personas for quick mode (2 agents)")
+        # Temporarily configure personas for 2 agents test mode
+        logger.info("Configuring personas for 2 agents test mode")
         for name in original_states.keys():
             registry.toggle_persona(name, False)
 
         registry.toggle_persona("apt29_cozy_bear", True)
         registry.toggle_persona("scattered_spider", True)
 
-        # Phase 2: Exploration (Layer 1) - Quick mode with 2 agents
-        logger.info("Quick Pipeline Phase 2: Exploration with 2 agents")
+        # Phase 2: Exploration (Layer 1) - 2 agents test mode with 2 agents
+        logger.info("2 agents test Phase 2: Exploration with 2 agents")
         exploration_start = time.time()
         exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
         exploration_time = time.time() - exploration_start
@@ -1391,12 +1391,12 @@ async def run_quick_pipeline(
         }
 
         logger.info(
-            f"Quick exploration complete: {len(exploration_paths)} paths from "
+            f"2 agents test exploration complete: {len(exploration_paths)} paths from "
             f"2 agents in {exploration_time:.2f}s"
         )
 
         # Phase 3: Evaluation (Layer 2)
-        logger.info("Quick Pipeline Phase 3: Evaluation (Layer 2)")
+        logger.info("2 agents test Phase 3: Evaluation (Layer 2)")
         evaluation_start = time.time()
         scored_paths = _run_evaluation(exploration_paths, asset_graph_dict, model=model)
         evaluation_time = time.time() - evaluation_start
@@ -1420,7 +1420,7 @@ async def run_quick_pipeline(
         )
 
         # Phase 4: Adversarial Validation (Layer 3)
-        logger.info("Quick Pipeline Phase 4: Adversarial Validation (Layer 3)")
+        logger.info("2 agents test Phase 4: Adversarial Validation (Layer 3)")
         adversarial_start = time.time()
 
         scored_paths_json = json.dumps(scored_paths, indent=2)
@@ -1451,7 +1451,7 @@ async def run_quick_pipeline(
         )
 
         # Phase 5: Mitigation Mapping
-        logger.info("Quick Pipeline Phase 5: Mitigation Mapping")
+        logger.info("2 agents test Phase 5: Mitigation Mapping")
         final_paths_with_mitigations = map_mitigations(adversarial_result["final_paths"])
 
         executive_summary = adversarial_result.get("executive_summary", "")
@@ -1591,10 +1591,10 @@ async def run_single_agent_pipeline(
 
         # Phase 1: Parse IaC file
         logger.info("=" * 60)
-        logger.info(f"Starting Single Agent Pipeline with {selected_persona['display_name']}")
+        logger.info(f"Starting single agent run Pipeline with {selected_persona['display_name']}")
         logger.info(f"File: {file.filename}")
         logger.info("=" * 60)
-        logger.info("Single Agent Phase 1: Parsing IaC file")
+        logger.info("single agent run Phase 1: Parsing IaC file")
         asset_graph = await _parse_iac_file(file)
         asset_graph_dict = asset_graph.model_dump()
 
@@ -1602,16 +1602,16 @@ async def run_single_agent_pipeline(
         logger.info("Building threat intelligence context")
         threat_intel_context, intel_count = _build_threat_intel_context()
 
-        # Temporarily configure personas for single agent mode
-        logger.info(f"Configuring for single agent mode: {agent_name}")
+        # Temporarily configure personas for single agent run mode
+        logger.info(f"Configuring for single agent run mode: {agent_name}")
         for name in original_states.keys():
             registry.toggle_persona(name, False)
 
         # Enable only the selected agent
         registry.toggle_persona(agent_name, True)
 
-        # Phase 2: Exploration (Layer 1) - Single agent mode
-        logger.info(f"Single Agent Phase 2: Exploration with {selected_persona['display_name']}")
+        # Phase 2: Exploration (Layer 1) - single agent run mode
+        logger.info(f"single agent run Phase 2: Exploration with {selected_persona['display_name']}")
         exploration_start = time.time()
         exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
         exploration_time = time.time() - exploration_start
@@ -1631,7 +1631,7 @@ async def run_single_agent_pipeline(
         )
 
         # Phase 3: Evaluation (Layer 2)
-        logger.info("Single Agent Phase 3: Evaluation (Layer 2)")
+        logger.info("single agent run Phase 3: Evaluation (Layer 2)")
         evaluation_start = time.time()
         scored_paths = _run_evaluation(exploration_paths, asset_graph_dict, model=model)
         evaluation_time = time.time() - evaluation_start
@@ -1655,7 +1655,7 @@ async def run_single_agent_pipeline(
         )
 
         # Phase 4: Adversarial Validation (Layer 3)
-        logger.info("Single Agent Phase 4: Adversarial Validation (Layer 3)")
+        logger.info("single agent run Phase 4: Adversarial Validation (Layer 3)")
         adversarial_start = time.time()
 
         scored_paths_json = json.dumps(scored_paths, indent=2)
@@ -1686,7 +1686,7 @@ async def run_single_agent_pipeline(
         )
 
         # Phase 5: Mitigation Mapping
-        logger.info("Single Agent Phase 5: Mitigation Mapping")
+        logger.info("single agent run Phase 5: Mitigation Mapping")
         final_paths_with_mitigations = map_mitigations(adversarial_result["final_paths"])
 
         executive_summary = adversarial_result.get("executive_summary", "")
@@ -1957,7 +1957,7 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
             logger.info(f"Job {job_id[:8]} cancelled after parsing phase")
             return
 
-        # Configure personas for quick mode (2 agents)
+        # Configure personas for 2 agents test mode
         registry = PersonaRegistry()
         original_states = {name: p.get("enabled", True) for name, p in registry.get_all().items()}
         
@@ -1968,7 +1968,7 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
         
         try:
             # Phase 1: Exploration
-            tracker.update_job(job_id, JobStatus.EXPLORATION, 20, "Exploring attack paths (2 agents)")
+            tracker.update_job(job_id, JobStatus.EXPLORATION, 20, "Exploring attack paths (2 agents test)")
             exploration_start = time.time()
             exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
             exploration_time = time.time() - exploration_start
@@ -2305,6 +2305,222 @@ async def analyze_post_mitigation(request: PostMitigationAnalysisRequest):
                 "top_residual_risks": [],
                 "recommendations": []
             },
+            execution_time_seconds=round(execution_time, 2),
+            error=str(e)
+        )
+
+
+class StigmergicSwarmResponse(BaseModel):
+    """Response model for stigmergic swarm exploration (Phase 10)."""
+
+    run_type: str = Field(default="multi_agents_swarm", description="Type of run executed")
+    execution_order: str = Field(..., description="Persona execution order strategy used")
+    personas_used: List[str] = Field(..., description="Display names of personas executed")
+    attack_paths: List[Dict[str, Any]] = Field(..., description="All discovered attack paths")
+    shared_graph_snapshot: Dict[str, Any] = Field(..., description="Final shared attack graph state")
+    emergent_insights: Dict[str, Any] = Field(
+        ...,
+        description="Emergent patterns from collective agent behavior"
+    )
+    activity_log: List[Dict[str, Any]] = Field(..., description="Complete agent activity log")
+    personas_execution_sequence: List[str] = Field(
+        ...,
+        description="Ordered list of persona names as executed"
+    )
+    status: str = Field(default="ok", description="Status: ok or error")
+    execution_time_seconds: float = Field(..., description="Total execution time")
+    error: str | None = Field(default=None, description="Error message if status is error")
+
+
+@router.post("/run/stigmergic", response_model=StigmergicSwarmResponse)
+async def run_stigmergic_swarm_pipeline(
+    file: UploadFile = File(...),
+    execution_order: str = "capability_ascending",
+    persona_limit: int | None = None,
+    model: str = Form(None)
+):
+    """
+    Run Phase 10: Stigmergic Swarm Exploration with sequential agent coordination.
+
+    This endpoint implements stigmergic coordination where threat actor personas
+    explore infrastructure sequentially while sharing knowledge through a shared
+    attack graph. Each agent deposits their findings, and later agents can see
+    and reinforce paths discovered by earlier agents (ant colony optimization).
+
+    **Stigmergic Coordination Features:**
+    - Sequential execution with configurable persona ordering
+    - Shared attack graph for indirect agent-to-agent coordination
+    - Pheromone-based reinforcement when multiple agents discover same techniques
+    - High-confidence techniques emerge from collective agent behavior
+    - Coverage gap analysis across infrastructure assets
+
+    **Execution Order Strategies:**
+    - `capability_ascending` (default): Execute from least to most sophisticated
+    - `random`: Randomize execution order to reduce bias
+    - `threat_actor_first`: Execute real threat actors before archetypes
+
+    **Emergent Insights:**
+    - High-confidence techniques: Reinforced by 2+ agents
+    - Convergent paths: Multi-step sequences discovered by multiple agents
+    - Coverage gaps: Assets with no attack deposits
+    - Technique clusters: Techniques that frequently co-occur
+
+    Args:
+        file: IaC file upload (.tf, .yaml, .yml, or .json)
+        execution_order: Persona ordering strategy (default: capability_ascending)
+        persona_limit: Optional limit on number of personas to execute (default: all)
+        model: Optional model override for this run
+
+    Returns:
+        StigmergicSwarmResponse with attack paths, shared graph, emergent insights
+
+    Raises:
+        HTTPException: 503 if LLM not configured, 413 if file too large,
+                      422 if file format unsupported, 500 for other errors
+    """
+    # Lazy import to avoid initialization at module load
+    from app.swarm.swarm_exploration import run_swarm_exploration
+
+    start_time = time.time()
+
+    # Log model override if provided
+    if model:
+        logger.info(f"Stigmergic swarm pipeline using model override: {model}")
+    else:
+        logger.info("Stigmergic swarm pipeline using default model from .env")
+
+    try:
+        # Check LLM configuration before starting
+        check_llm_configured()
+
+        # Validate model is not WIP
+        validate_model_not_wip(model)
+
+        # Phase 1: Parse IaC file
+        logger.info("=" * 60)
+        logger.info("Starting Phase 10: Stigmergic Swarm Exploration Pipeline")
+        logger.info(f"File: {file.filename}")
+        logger.info(f"Execution order: {execution_order}")
+        if persona_limit:
+            logger.info(f"Persona limit: {persona_limit}")
+        logger.info("=" * 60)
+
+        logger.info("Phase 1: Parsing IaC file")
+        asset_graph = await _parse_iac_file(file)
+        asset_graph_dict = asset_graph.model_dump()
+
+        # Get enabled personas
+        enabled_personas_dict = persona_registry.get_enabled()
+
+        # Convert personas dict to list format expected by run_swarm_exploration
+        enabled_personas_list = []
+        for persona_name, persona_config in enabled_personas_dict.items():
+            persona_entry = {
+                "name": persona_name,
+                **persona_config
+            }
+            enabled_personas_list.append(persona_entry)
+
+        # Apply persona limit if specified
+        if persona_limit and persona_limit > 0:
+            enabled_personas_list = enabled_personas_list[:persona_limit]
+            logger.info(f"Limited to {len(enabled_personas_list)} personas")
+
+        if not enabled_personas_list:
+            raise HTTPException(
+                status_code=400,
+                detail="No enabled personas found. Enable at least one persona to run stigmergic swarm."
+            )
+
+        logger.info(f"Executing with {len(enabled_personas_list)} enabled personas")
+
+        # Build LLM config
+        llm_config = {
+            "model": model,
+            "provider": get_settings().LLM_PROVIDER
+        }
+
+        # Phase 2: Run stigmergic swarm exploration
+        logger.info("Phase 2: Stigmergic Swarm Exploration")
+        swarm_result = await run_swarm_exploration(
+            asset_graph=asset_graph_dict,
+            enabled_personas=enabled_personas_list,
+            llm_config=llm_config,
+            execution_order=execution_order,
+            progress_callback=None  # No callback for now
+        )
+
+        execution_time = time.time() - start_time
+
+        # Extract results
+        attack_paths = swarm_result.get("attack_paths", [])
+        shared_graph_snapshot = swarm_result.get("shared_graph_snapshot", {})
+        emergent_insights = swarm_result.get("emergent_insights", {})
+        activity_log = swarm_result.get("activity_log", [])
+        execution_summary = swarm_result.get("execution_summary", {})
+
+        personas_executed = execution_summary.get("personas_executed", [])
+
+        logger.info("=" * 60)
+        logger.info("Phase 10: Stigmergic Swarm Exploration Complete")
+        logger.info(f"Total execution time: {execution_time:.2f}s")
+        logger.info(f"Total attack paths: {len(attack_paths)}")
+        logger.info(f"Total nodes in shared graph: {shared_graph_snapshot.get('statistics', {}).get('total_nodes', 0)}")
+        logger.info(f"Reinforced nodes: {shared_graph_snapshot.get('statistics', {}).get('reinforced_nodes', 0)}")
+        logger.info(f"High-confidence techniques: {len(emergent_insights.get('high_confidence_techniques', []))}")
+        logger.info("=" * 60)
+
+        response = StigmergicSwarmResponse(
+            run_type="multi_agents_swarm",
+            execution_order=execution_order,
+            personas_used=personas_executed,
+            attack_paths=attack_paths,
+            shared_graph_snapshot=shared_graph_snapshot,
+            emergent_insights=emergent_insights,
+            activity_log=activity_log,
+            personas_execution_sequence=personas_executed,
+            status="ok",
+            execution_time_seconds=round(execution_time, 2)
+        )
+
+        # Auto-save to archive
+        try:
+            archive_service = get_archive_service()
+            archive_service.save_run(
+                pipeline_result=response.model_dump(),
+                file_name=file.filename,
+                mode="stigmergic",
+                agent_name=None,
+                model_used=get_current_model_name(model),
+            )
+            logger.info(f"Archived stigmergic swarm run for {file.filename}")
+        except Exception as e:
+            logger.error(f"Failed to archive run: {e}", exc_info=True)
+            # Continue - don't fail the pipeline if archiving fails
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        execution_time = time.time() - start_time
+        logger.error(f"Stigmergic swarm pipeline failed after {execution_time:.2f}s: {e}", exc_info=True)
+
+        return StigmergicSwarmResponse(
+            run_type="multi_agents_swarm",
+            execution_order=execution_order,
+            personas_used=[],
+            attack_paths=[],
+            shared_graph_snapshot={},
+            emergent_insights={
+                "high_confidence_techniques": [],
+                "convergent_paths": [],
+                "coverage_gaps": [],
+                "technique_clusters": []
+            },
+            activity_log=[],
+            personas_execution_sequence=[],
+            status="error",
             execution_time_seconds=round(execution_time, 2),
             error=str(e)
         )
