@@ -1768,10 +1768,18 @@ function ThreatModelPage() {
                               };
                               const priorityColor = priorityColors[mitigation.priority] || priorityColors.medium;
 
+                              const layerColors = {
+                                preventive: '#10b981',
+                                detective: '#3b82f6',
+                                corrective: '#f59e0b',
+                                administrative: '#8b5cf6'
+                              };
+
                               return (
                                 <div key={mitIndex} style={{
                                   background: '#f8fafc',
                                   border: '1px solid #e2e8f0',
+                                  borderLeft: `4px solid ${layerColors[layer]}`,
                                   borderRadius: '0.375rem',
                                   padding: '0.75rem',
                                   marginBottom: '0.5rem',

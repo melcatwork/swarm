@@ -2327,6 +2327,11 @@ class StigmergicSwarmResponse(BaseModel):
         ...,
         description="Ordered list of persona names as executed"
     )
+    asset_graph: Dict[str, Any] = Field(..., description="Parsed infrastructure asset graph")
+    evaluation_summary: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Summary of evaluation metrics across all paths"
+    )
     status: str = Field(default="ok", description="Status: ok or error")
     execution_time_seconds: float = Field(..., description="Total execution time")
     error: str | None = Field(default=None, description="Error message if status is error")
@@ -2450,8 +2455,6 @@ async def run_stigmergic_swarm_pipeline(
             progress_callback=None  # No callback for now
         )
 
-        execution_time = time.time() - start_time
-
         # Extract results
         attack_paths = swarm_result.get("attack_paths", [])
         shared_graph_snapshot = swarm_result.get("shared_graph_snapshot", {})
@@ -2459,12 +2462,43 @@ async def run_stigmergic_swarm_pipeline(
         activity_log = swarm_result.get("activity_log", [])
         execution_summary = swarm_result.get("execution_summary", {})
 
+        # Phase 3: Evaluation (add scores to paths like regular pipeline)
+        logger.info("Phase 3: Evaluation")
+        evaluation_start = time.time()
+        scored_paths = _run_evaluation(attack_paths, asset_graph_dict, model=model)
+        evaluation_time = time.time() - evaluation_start
+
+        # Calculate evaluation summary
+        composite_scores = [
+            path["evaluation"]["composite_score"]
+            for path in scored_paths
+            if "evaluation" in path and "composite_score" in path["evaluation"]
+        ]
+
+        evaluation_summary = {
+            "paths_scored": len(scored_paths),
+            "highest_score": max(composite_scores) if composite_scores else 0,
+            "lowest_score": min(composite_scores) if composite_scores else 0,
+            "mean_score": round(sum(composite_scores) / len(composite_scores), 2) if composite_scores else 0,
+            "execution_time_seconds": round(evaluation_time, 2),
+        }
+
+        logger.info(
+            f"Evaluation complete: {len(scored_paths)} paths scored in {evaluation_time:.2f}s"
+        )
+
+        # Phase 4: Mitigation Mapping (add defence-in-depth mitigations)
+        logger.info("Phase 4: Mitigation Mapping")
+        final_paths_with_mitigations = map_mitigations(scored_paths)
+
+        execution_time = time.time() - start_time
+
         personas_executed = execution_summary.get("personas_executed", [])
 
         logger.info("=" * 60)
         logger.info("Phase 10: Stigmergic Swarm Exploration Complete")
         logger.info(f"Total execution time: {execution_time:.2f}s")
-        logger.info(f"Total attack paths: {len(attack_paths)}")
+        logger.info(f"Total attack paths: {len(final_paths_with_mitigations)}")
         logger.info(f"Total nodes in shared graph: {shared_graph_snapshot.get('statistics', {}).get('total_nodes', 0)}")
         logger.info(f"Reinforced nodes: {shared_graph_snapshot.get('statistics', {}).get('reinforced_nodes', 0)}")
         logger.info(f"High-confidence techniques: {len(emergent_insights.get('high_confidence_techniques', []))}")
@@ -2474,11 +2508,13 @@ async def run_stigmergic_swarm_pipeline(
             run_type="multi_agents_swarm",
             execution_order=execution_order,
             personas_used=personas_executed,
-            attack_paths=attack_paths,
+            attack_paths=final_paths_with_mitigations,
             shared_graph_snapshot=shared_graph_snapshot,
             emergent_insights=emergent_insights,
             activity_log=activity_log,
             personas_execution_sequence=personas_executed,
+            asset_graph=asset_graph_dict,
+            evaluation_summary=evaluation_summary,
             status="ok",
             execution_time_seconds=round(execution_time, 2)
         )
@@ -2520,6 +2556,8 @@ async def run_stigmergic_swarm_pipeline(
             },
             activity_log=[],
             personas_execution_sequence=[],
+            asset_graph={},
+            evaluation_summary={},
             status="error",
             execution_time_seconds=round(execution_time, 2),
             error=str(e)

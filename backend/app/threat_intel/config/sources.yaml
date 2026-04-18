@@ -38,7 +38,7 @@ sources:
     feed_url: https://www.darkreading.com/rss.xml
 - name: Krebs on Security
   adapter: hackernews_rss
-  enabled: true
+  enabled: false
   refresh_minutes: 30
   config:
     feed_url: https://krebsonsecurity.com/feed/
@@ -50,7 +50,7 @@ sources:
     feed_url: https://www.bleepingcomputer.com/feed/
 - name: Cybersecurity News
   adapter: hackernews_rss
-  enabled: true
+  enabled: false
   refresh_minutes: 30
   config:
     feed_url: https://cybersecuritynews.com/feed/
@@ -68,13 +68,13 @@ sources:
     feed_url: https://threatpost.com/feed/
 - name: Ars Technica Security
   adapter: hackernews_rss
-  enabled: true
+  enabled: false
   refresh_minutes: 30
   config:
     feed_url: https://arstechnica.com/security/feed/
 - name: Simon Willison
   adapter: hackernews_rss
-  enabled: true
+  enabled: false
   refresh_minutes: 60
   config:
     feed_url: https://simonwillison.net/atom/everything/
