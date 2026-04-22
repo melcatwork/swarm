@@ -863,6 +863,168 @@ export default function CsaPathCard({
             </div>
           )}
 
+          {/* Residual CSA Risk Details row (Post-Mitigation) */}
+          {hasResidualRisk && residualScore && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 12,
+                marginBottom: 14,
+                padding: 12,
+                backgroundColor: '#10b98110',
+                border: '1px solid #10b98140',
+                borderRadius: 6,
+              }}
+            >
+              {/* Residual Likelihood column */}
+              {residualScore.likelihood && (
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      color: '#059669',
+                      letterSpacing: '0.08em',
+                      marginBottom: 6,
+                    }}
+                  >
+                    Residual Likelihood
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: residualBandColour,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {residualScore.likelihood.score}
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 400,
+                        color: 'var(--color-text-secondary)',
+                        marginLeft: 4,
+                      }}
+                    >
+                      / 5
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--color-text-secondary)',
+                      marginTop: 2,
+                    }}
+                  >
+                    {residualScore.likelihood.label}
+                  </div>
+                </div>
+              )}
+
+              {/* Residual Impact column (unchanged from original) */}
+              {residualScore.impact && (
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      color: '#059669',
+                      letterSpacing: '0.08em',
+                      marginBottom: 6,
+                    }}
+                  >
+                    Residual Impact
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: residualBandColour,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {residualScore.impact.score}
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 400,
+                        color: 'var(--color-text-secondary)',
+                        marginLeft: 4,
+                      }}
+                    >
+                      / 5
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--color-text-secondary)',
+                      marginTop: 2,
+                    }}
+                  >
+                    {residualScore.impact.label}
+                  </div>
+                </div>
+              )}
+
+              {/* Residual Risk level column */}
+              {residualRiskLevel !== undefined && (
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      color: '#059669',
+                      letterSpacing: '0.08em',
+                      marginBottom: 6,
+                    }}
+                  >
+                    Residual Risk Level
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: residualBandColour,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {residualRiskLevel}
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 400,
+                        color: 'var(--color-text-secondary)',
+                        marginLeft: 4,
+                      }}
+                    >
+                      / 25
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      marginTop: 4,
+                      backgroundColor: residualBandColour,
+                      color: '#fff',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {residualBand}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* CIA classification */}
           {cia.length > 0 && (
             <div style={{ marginBottom: 12 }}>
