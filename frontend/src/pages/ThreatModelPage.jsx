@@ -1264,7 +1264,7 @@ function ThreatModelPage() {
                         <CsaPathCard
                           key={path.path_id || path.id || `confirmed-${i}`}
                           path={path}
-                          defaultExpanded={i === 0}
+                          defaultExpanded={false}
                         />
                       ))}
                     </div>
