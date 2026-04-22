@@ -143,7 +143,8 @@ def extract_confirmed_findings_as_paths(
             for i, s in enumerate(chain.steps, 1)
         ]
         synthesised.append({
-            'path_id': f'confirmed-{chain.chain_id}',
+            'id': f'confirmed-{chain.chain_id}',  # Primary ID field for consistency
+            'path_id': f'confirmed-{chain.chain_id}',  # Legacy field (kept for compatibility)
             'name': chain.chain_name,
             'source': 'confirmed_vuln_synthesis',
             'grounded_in_confirmed_vuln': True,

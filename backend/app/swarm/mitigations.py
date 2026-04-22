@@ -454,7 +454,8 @@ def analyze_post_mitigation_impact(
     residual_scores = []
 
     for path in attack_paths:
-        path_id = path.get("id", "")
+        # Try multiple fields for path identifier (id, path_id, name as fallback)
+        path_id = path.get("id") or path.get("path_id") or path.get("name", "")
         path_name = path.get("name", "Unnamed Path")
         objective = path.get("objective", "")
         original_difficulty = path.get("difficulty", "medium")

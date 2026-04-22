@@ -8,6 +8,7 @@ import logging
 import os
 import re
 from typing import List, Dict, Any
+from uuid import uuid4
 
 from crewai import Agent, Crew, Task, Process, LLM
 
@@ -549,6 +550,11 @@ def parse_exploration_results(crew_output) -> List[Dict]:
                         else:
                             logger.warning(f"Attack path '{path['name']}' has no valid steps, skipping")
                             continue
+
+                        # Generate unique ID if missing (required for mitigation tracking)
+                        if "id" not in path:
+                            path["id"] = f"path_{uuid4().hex[:12]}"
+                            logger.debug(f"Generated ID for path '{path['name']}': {path['id']}")
 
                         all_attack_paths.append(path)
                         logger.info(f"✓ Added attack path: {path['name']} with {len(normalized_steps)} steps")
