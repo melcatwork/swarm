@@ -623,10 +623,30 @@ def analyze_post_mitigation_impact(
         "still_viable": len([p for p in post_mitigation_paths if p.path_status == "still_viable"]),
     }
 
-    # Risk reduction calculation
-    original_mean_score = sum(original_scores) / len(original_scores) if original_scores else 0
-    residual_mean_score = sum(residual_scores) / len(residual_scores) if residual_scores else 0
-    risk_reduction = ((original_mean_score - residual_mean_score) / original_mean_score * 100) if original_mean_score > 0 else 0
+    # Risk reduction calculation based on CSA risk levels (not composite scores)
+    # This aligns with what users see in per-path CSA risk band displays
+    original_csa_total = sum([
+        path.get("csa_risk_score", {}).get("risk_level", 0)
+        for path in attack_paths
+    ])
+    residual_csa_total = sum([
+        p.residual_csa_risk_score.get("risk_level", 0)
+        for p in post_mitigation_paths
+        if p.residual_csa_risk_score
+    ])
+
+    # Fallback to composite scores if CSA scores not available
+    if original_csa_total == 0:
+        logger.warning("No CSA risk scores found, falling back to composite score calculation")
+        original_mean_score = sum(original_scores) / len(original_scores) if original_scores else 0
+        residual_mean_score = sum(residual_scores) / len(residual_scores) if residual_scores else 0
+        risk_reduction = ((original_mean_score - residual_mean_score) / original_mean_score * 100) if original_mean_score > 0 else 0
+    else:
+        risk_reduction = ((original_csa_total - residual_csa_total) / original_csa_total * 100) if original_csa_total > 0 else 0
+        logger.info(
+            f"CSA-based risk reduction: {original_csa_total} → {residual_csa_total} "
+            f"({risk_reduction:.1f}% reduction)"
+        )
 
     # Top residual risks (top 3 still viable or partially mitigated paths)
     viable_paths = [
