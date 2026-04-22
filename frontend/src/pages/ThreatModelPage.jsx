@@ -3,6 +3,9 @@ import axios from 'axios';
 import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save, StopCircle, Settings, Network } from 'lucide-react';
 import Toast from '../components/Toast';
 import StigmergicResultsView from '../components/StigmergicResultsView';
+import ImpactSelector from '../components/ImpactSelector';
+import CsaRiskSummary from '../components/CsaRiskSummary';
+import CsaPathCard from '../components/CsaPathCard';
 import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, uploadAndRunStigmergic, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels, checkHealth, cancelRun } from '../api/client';
 import { formatGMT8DateShort, formatGMT8Time } from '../utils/formatters';
 import './ThreatModelPage.css';
@@ -19,6 +22,7 @@ function ThreatModelPage() {
   const [personas, setPersonas] = useState({});
   const [selectedAgent, setSelectedAgent] = useState('apt29_cozy_bear');
   const [executionOrder, setExecutionOrder] = useState('capability_ascending'); // For stigmergic swarm
+  const [showAssetDetails, setShowAssetDetails] = useState(false);
   const [heartbeat, setHeartbeat] = useState(0);
   const [backendAlive, setBackendAlive] = useState(true);
   const [lastBackendCheck, setLastBackendCheck] = useState(null);
@@ -26,6 +30,9 @@ function ThreatModelPage() {
   // LLM model selection state
   const [availableModels, setAvailableModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState(null); // null = use default from .env
+
+  // CSA CII impact score state
+  const [impactScore, setImpactScore] = useState(3); // Default: Moderate
 
   // Post-mitigation analysis state
   const [selectedMitigations, setSelectedMitigations] = useState({});
@@ -345,13 +352,13 @@ function ThreatModelPage() {
 
       let data;
       if (mode === 'quick') {
-        data = await uploadAndRunQuick(selectedFile, selectedModel, source.token);
+        data = await uploadAndRunQuick(selectedFile, selectedModel, impactScore, source.token);
       } else if (mode === 'single') {
-        data = await uploadAndRunSingleAgent(selectedFile, selectedAgent, selectedModel, source.token);
+        data = await uploadAndRunSingleAgent(selectedFile, selectedAgent, selectedModel, impactScore, source.token);
       } else if (mode === 'stigmergic') {
-        data = await uploadAndRunStigmergic(selectedFile, executionOrder, selectedModel, source.token);
+        data = await uploadAndRunStigmergic(selectedFile, executionOrder, selectedModel, impactScore, source.token);
       } else {
-        data = await uploadAndRunSwarm(selectedFile, selectedModel, source.token);
+        data = await uploadAndRunSwarm(selectedFile, selectedModel, impactScore, source.token);
       }
 
       clearInterval(phaseInterval);
@@ -854,6 +861,12 @@ function ThreatModelPage() {
       <div className="upload-panel">
         <h3>Upload Infrastructure-as-Code</h3>
 
+        {/* CSA CII Impact Score Selection */}
+        <ImpactSelector
+          value={impactScore}
+          onChange={setImpactScore}
+        />
+
         <div
           className={`file-dropzone ${selectedFile ? 'has-file' : ''}`}
           onDrop={handleDrop}
@@ -1081,7 +1094,26 @@ function ThreatModelPage() {
       {/* Section B: Asset Graph View */}
       {result && result.asset_graph && (
         <div className="asset-graph-panel">
-          <h3>Infrastructure Asset Graph</h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h3>Infrastructure Asset Graph</h3>
+            <button
+              onClick={() => setShowAssetDetails(!showAssetDetails)}
+              className="btn btn-ghost"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              {showAssetDetails ? (
+                <>
+                  <ChevronUp size={16} />
+                  Hide Details
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={16} />
+                  Show Details
+                </>
+              )}
+            </button>
+          </div>
 
           <div className="asset-summary-stats">
             <div className="stat-card">
@@ -1098,45 +1130,47 @@ function ThreatModelPage() {
             </div>
           </div>
 
-          <div className="asset-table-container">
-            {Object.entries(groupAssetsByBoundary(result.asset_graph)).map(([boundary, assets]) => (
-              <div key={boundary} className="boundary-group">
-                <h4 className="boundary-header">
-                  <Shield size={16} />
-                  {boundary}
-                  <span className="boundary-count">({assets.length} assets)</span>
-                </h4>
-                <table className="asset-table">
-                  <thead>
-                    <tr>
-                      <th>Asset Name</th>
-                      <th>Type</th>
-                      <th>Service</th>
-                      <th>Internet Facing</th>
-                      <th>Trust Boundary</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assets.map((asset, idx) => (
-                      <tr key={idx}>
-                        <td className="asset-name">{asset.name}</td>
-                        <td>{asset.type}</td>
-                        <td>{asset.service}</td>
-                        <td>
-                          {asset.properties?.internet_facing ? (
-                            <span className="badge badge-warning">Yes</span>
-                          ) : (
-                            <span className="badge badge-success">No</span>
-                          )}
-                        </td>
-                        <td>{asset.trust_boundary || 'unknown'}</td>
+          {showAssetDetails && (
+            <div className="asset-table-container">
+              {Object.entries(groupAssetsByBoundary(result.asset_graph)).map(([boundary, assets]) => (
+                <div key={boundary} className="boundary-group">
+                  <h4 className="boundary-header">
+                    <Shield size={16} />
+                    {boundary}
+                    <span className="boundary-count">({assets.length} assets)</span>
+                  </h4>
+                  <table className="asset-table">
+                    <thead>
+                      <tr>
+                        <th>Asset Name</th>
+                        <th>Type</th>
+                        <th>Service</th>
+                        <th>Internet Facing</th>
+                        <th>Trust Boundary</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
+                    </thead>
+                    <tbody>
+                      {assets.map((asset, idx) => (
+                        <tr key={idx}>
+                          <td className="asset-name">{asset.name}</td>
+                          <td>{asset.type}</td>
+                          <td>{asset.service}</td>
+                          <td>
+                            {asset.properties?.internet_facing ? (
+                              <span className="badge badge-warning">Yes</span>
+                            ) : (
+                              <span className="badge badge-success">No</span>
+                            )}
+                          </td>
+                          <td>{asset.trust_boundary || 'unknown'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1164,798 +1198,43 @@ function ThreatModelPage() {
               <span className="stat-value">{result.final_paths.length}</span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Avg Confidence</span>
-              <span className="stat-value">
-                {result.final_paths.filter(p => p.confidence === 'high').length}H /
-                {result.final_paths.filter(p => p.confidence === 'medium').length}M /
-                {result.final_paths.filter(p => p.confidence === 'low').length}L
-              </span>
+              <span className="stat-label">Execution Time</span>
+              <span className="stat-value">{Math.round(result.execution_time_seconds / 60)}m</span>
             </div>
             <div className="stat-item">
               <span className="stat-label">Coverage</span>
               <span className="stat-value">{result.adversarial_summary?.coverage_estimate || 'N/A'}</span>
             </div>
-            <div className="stat-item">
-              <span className="stat-label">Execution Time</span>
-              <span className="stat-value">{Math.round(result.execution_time_seconds / 60)}m</span>
-            </div>
           </div>
 
-          {/* Evaluation Summary Panel */}
-          {(() => {
-            const evalStats = calculateEvaluationStats(result.final_paths);
-            if (!evalStats) return null;
-
-            return (
-              <div className="evaluation-summary-panel">
-                <div className="evaluation-header">
-                  <div>
-                    <h3>📊 Evaluation Summary</h3>
-                    <p style={{ fontSize: '0.875rem', color: '#64748b', margin: '0.5rem 0 0 0' }}>
-                      Multi-criteria scoring across {result.final_paths.length} attack path{result.final_paths.length !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  <div className="overall-score-badge">
-                    <div className="score-badge-value">{evalStats.composite.avg.toFixed(1)}</div>
-                    <div className="score-badge-label">Avg Risk Score</div>
-                  </div>
-                </div>
-
-                {/* Scoring Methodology */}
-                <div className="scoring-methodology">
-                  <h4 style={{ fontSize: '0.9375rem', marginBottom: '0.75rem', color: '#1e293b' }}>
-                    Composite Scoring Methodology
-                  </h4>
-                  <div className="methodology-grid">
-                    <div className="methodology-item">
-                      <span className="weight-badge">30%</span>
-                      <span className="methodology-label">Feasibility</span>
-                      <span className="methodology-desc">Technical likelihood of success</span>
-                    </div>
-                    <div className="methodology-item">
-                      <span className="weight-badge">25%</span>
-                      <span className="methodology-label">Impact</span>
-                      <span className="methodology-desc">Potential damage to CIA triad</span>
-                    </div>
-                    <div className="methodology-item">
-                      <span className="weight-badge">15%</span>
-                      <span className="methodology-label">Detection Difficulty</span>
-                      <span className="methodology-desc">Evasion of security controls</span>
-                    </div>
-                    <div className="methodology-item">
-                      <span className="weight-badge">15%</span>
-                      <span className="methodology-label">Novelty</span>
-                      <span className="methodology-desc">Uniqueness of attack vector</span>
-                    </div>
-                    <div className="methodology-item">
-                      <span className="weight-badge">15%</span>
-                      <span className="methodology-label">Coherence</span>
-                      <span className="methodology-desc">Logical flow and realism</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Evaluation Metrics Grid */}
-                <div className="evaluation-metrics-grid">
-                  {/* Feasibility */}
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <span className="metric-icon">🎯</span>
-                      <span className="metric-title">Feasibility</span>
-                    </div>
-                    <div className="metric-score-display">
-                      <div className="metric-main-score">{evalStats.feasibility.avg.toFixed(1)}/10</div>
-                      <div className="metric-range">
-                        <span>Range: {evalStats.feasibility.min.toFixed(1)} - {evalStats.feasibility.max.toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <div className="metric-bar">
-                      <div
-                        className="metric-bar-fill feasibility"
-                        style={{ width: `${(evalStats.feasibility.avg / 10) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Impact */}
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <span className="metric-icon">💥</span>
-                      <span className="metric-title">Impact</span>
-                    </div>
-                    <div className="metric-score-display">
-                      <div className="metric-main-score">{evalStats.impact.avg.toFixed(1)}/10</div>
-                      <div className="metric-range">
-                        <span>Range: {evalStats.impact.min.toFixed(1)} - {evalStats.impact.max.toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <div className="metric-bar">
-                      <div
-                        className="metric-bar-fill impact"
-                        style={{ width: `${(evalStats.impact.avg / 10) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Detection Difficulty */}
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <span className="metric-icon">🕵️</span>
-                      <span className="metric-title">Detection Difficulty</span>
-                    </div>
-                    <div className="metric-score-display">
-                      <div className="metric-main-score">{evalStats.detection.avg.toFixed(1)}/10</div>
-                      <div className="metric-range">
-                        <span>Range: {evalStats.detection.min.toFixed(1)} - {evalStats.detection.max.toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <div className="metric-bar">
-                      <div
-                        className="metric-bar-fill detection"
-                        style={{ width: `${(evalStats.detection.avg / 10) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Novelty */}
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <span className="metric-icon">✨</span>
-                      <span className="metric-title">Novelty</span>
-                    </div>
-                    <div className="metric-score-display">
-                      <div className="metric-main-score">{evalStats.novelty.avg.toFixed(1)}/10</div>
-                      <div className="metric-range">
-                        <span>Range: {evalStats.novelty.min.toFixed(1)} - {evalStats.novelty.max.toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <div className="metric-bar">
-                      <div
-                        className="metric-bar-fill novelty"
-                        style={{ width: `${(evalStats.novelty.avg / 10) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Coherence */}
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <span className="metric-icon">🧩</span>
-                      <span className="metric-title">Coherence</span>
-                    </div>
-                    <div className="metric-score-display">
-                      <div className="metric-main-score">{evalStats.coherence.avg.toFixed(1)}/10</div>
-                      <div className="metric-range">
-                        <span>Range: {evalStats.coherence.min.toFixed(1)} - {evalStats.coherence.max.toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <div className="metric-bar">
-                      <div
-                        className="metric-bar-fill coherence"
-                        style={{ width: `${(evalStats.coherence.avg / 10) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Composite Score */}
-                  <div className="metric-card composite">
-                    <div className="metric-header">
-                      <span className="metric-icon">📈</span>
-                      <span className="metric-title">Composite Score</span>
-                    </div>
-                    <div className="metric-score-display">
-                      <div className="metric-main-score">{evalStats.composite.avg.toFixed(1)}/10</div>
-                      <div className="metric-range">
-                        <span>Range: {evalStats.composite.min.toFixed(1)} - {evalStats.composite.max.toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <div className="metric-bar">
-                      <div
-                        className="metric-bar-fill composite"
-                        style={{ width: `${(evalStats.composite.avg / 10) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Key Findings */}
-                <div className="evaluation-findings">
-                  <h4 style={{ fontSize: '0.9375rem', marginBottom: '0.75rem', color: '#1e293b' }}>
-                    🔍 Key Findings
-                  </h4>
-                  <div className="findings-list">
-                    {evalStats.composite.avg >= 7.0 && (
-                      <div className="finding-item critical">
-                        <span className="finding-badge critical">Critical</span>
-                        <span className="finding-text">
-                          High average composite score ({evalStats.composite.avg.toFixed(1)}/10) indicates significant threat exposure
-                        </span>
-                      </div>
-                    )}
-                    {evalStats.feasibility.avg >= 7.0 && (
-                      <div className="finding-item high">
-                        <span className="finding-badge high">High</span>
-                        <span className="finding-text">
-                          Attack paths demonstrate high feasibility ({evalStats.feasibility.avg.toFixed(1)}/10) - immediate action recommended
-                        </span>
-                      </div>
-                    )}
-                    {evalStats.impact.avg >= 7.0 && (
-                      <div className="finding-item high">
-                        <span className="finding-badge high">High</span>
-                        <span className="finding-text">
-                          Potential impact is severe ({evalStats.impact.avg.toFixed(1)}/10) - prioritize mitigation controls
-                        </span>
-                      </div>
-                    )}
-                    {evalStats.detection.avg >= 7.0 && (
-                      <div className="finding-item medium">
-                        <span className="finding-badge medium">Medium</span>
-                        <span className="finding-text">
-                          Attack paths are difficult to detect ({evalStats.detection.avg.toFixed(1)}/10) - enhance monitoring
-                        </span>
-                      </div>
-                    )}
-                    {evalStats.composite.avg < 5.0 && (
-                      <div className="finding-item low">
-                        <span className="finding-badge low">Low</span>
-                        <span className="finding-text">
-                          Overall risk score is moderate ({evalStats.composite.avg.toFixed(1)}/10) - standard security posture adequate
-                        </span>
-                      </div>
-                    )}
-                    {result.final_paths.some(p => p.challenged) && (
-                      <div className="finding-item info">
-                        <span className="finding-badge info">Info</span>
-                        <span className="finding-text">
-                          {result.final_paths.filter(p => p.challenged).length} path(s) challenged by red team - review arbitration notes
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Adversarial Validation Summary */}
-                {result.adversarial_summary && (
-                  <div className="adversarial-validation-summary">
-                    <h4 style={{ fontSize: '0.9375rem', marginBottom: '0.75rem', color: '#1e293b' }}>
-                      ⚔️ Adversarial Validation
-                    </h4>
-                    <div className="adversarial-stats">
-                      <div className="adversarial-stat-item">
-                        <span className="adversarial-label">Coverage Estimate:</span>
-                        <span className="adversarial-value">{result.adversarial_summary.coverage_estimate || 'N/A'}</span>
-                      </div>
-                      {result.adversarial_summary.red_team_challenges && (
-                        <div className="adversarial-stat-item">
-                          <span className="adversarial-label">Red Team Challenges:</span>
-                          <span className="adversarial-value">{result.adversarial_summary.red_team_challenges}</span>
-                        </div>
-                      )}
-                      {result.adversarial_summary.blue_team_gaps && (
-                        <div className="adversarial-stat-item">
-                          <span className="adversarial-label">Blue Team Gaps Identified:</span>
-                          <span className="adversarial-value">{result.adversarial_summary.blue_team_gaps}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          {/* CSA Risk Assessment Summary */}
+          {result.csa_risk_assessment && (
+            <CsaRiskSummary
+              csaRiskAssessment={result.csa_risk_assessment}
+            />
+          )}
 
           {/* Attack Path Cards */}
           <div className="attack-paths-list">
             <h3>Attack Paths ({result.final_paths.length})</h3>
 
-            {result.final_paths.map((path, pathIndex) => {
-              const isExpanded = expandedPaths.has(pathIndex);
-              const confidenceBadge = getConfidenceBadge(path.confidence);
-              const evaluation = path.evaluation || {};
-              const impactColor = getImpactTypeColor(path.impact_type);
-              const compositeScore = evaluation.composite_score || path.composite_score;
+            {/* Attack Paths with CSA Risk Scoring */}
+            {(() => {
+              const paths = result.csa_risk_assessment?.scored_paths || result.final_paths || []
+              const sorted = [...paths].sort((a, b) => {
+                const scoreA = a.csa_risk_score?.risk_level ?? 0
+                const scoreB = b.csa_risk_score?.risk_level ?? 0
+                return scoreB - scoreA
+              })
+              return sorted.map((path, i) => (
+                <CsaPathCard
+                  key={path.path_id || path.id || i}
+                  path={path}
+                  defaultExpanded={i === 0}
+                />
+              ))
+            })()}
 
-              return (
-                <div key={pathIndex} className="attack-path-card-v2">
-                  {/* Header Section */}
-                  <div className="path-header-v2">
-                    <div className="path-title-section">
-                      <h4 className="path-name-v2">{path.name}</h4>
-                      {path.objective && (
-                        <div className="path-objective">
-                          <strong>Objective:</strong> {path.objective}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="path-badges-section">
-                      <span className="badge badge-actor">{path.threat_actor || 'Unknown Actor'}</span>
-                      <span
-                        className="badge badge-impact"
-                        style={{ backgroundColor: impactColor.bg, color: impactColor.text }}
-                      >
-                        {impactColor.label}
-                      </span>
-                      <span className="badge badge-difficulty">{path.difficulty}</span>
-                      {path.challenged && (
-                        <span className="badge badge-challenged">Challenged</span>
-                      )}
-                      <span
-                        className="badge badge-confidence"
-                        style={{ backgroundColor: confidenceBadge.bg, color: confidenceBadge.color }}
-                      >
-                        {confidenceBadge.label}
-                      </span>
-                    </div>
-
-                    {compositeScore && (
-                      <div className="path-score-indicator">
-                        <div className="score-circle">
-                          <span className="score-value">{compositeScore.toFixed(1)}</span>
-                          <span className="score-label">/10</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Kill Chain Visualization */}
-                  <div className="kill-chain-container">
-                    <div className="kill-chain-pipeline">
-                      {path.steps?.map((step, stepIndex) => {
-                        const phaseColor = getKillChainPhaseColor(step.kill_chain_phase);
-                        const isLastStep = stepIndex === path.steps.length - 1;
-
-                        return (
-                          <div key={stepIndex} className="kill-chain-step-wrapper">
-                            <div className="kill-chain-step" style={{ borderColor: phaseColor.border }}>
-                              <div
-                                className="step-phase-header"
-                                style={{
-                                  backgroundColor: phaseColor.bg,
-                                  color: phaseColor.text,
-                                  borderBottom: `2px solid ${phaseColor.border}`
-                                }}
-                              >
-                                <span className="step-number-badge">{step.step_number || stepIndex + 1}</span>
-                                <span className="phase-name">{step.kill_chain_phase}</span>
-                              </div>
-
-                              <div className="step-content">
-                                <div className="step-technique-row">
-                                  <a
-                                    href={formatTechniqueUrl(step.technique_id)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="technique-badge"
-                                    title="View on MITRE ATT&CK"
-                                  >
-                                    {step.technique_id}
-                                  </a>
-                                  <span className="technique-name-display">{step.technique_name}</span>
-                                </div>
-
-                                <div className="step-target-row">
-                                  <strong>Target:</strong> <code>{step.target_asset}</code>
-                                </div>
-
-                                <p className="step-action">
-                                  {step.action_description || step.description}
-                                </p>
-
-                                {step.outcome && (
-                                  <div className="step-outcome-box">
-                                    <strong>Outcome:</strong> {step.outcome}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {!isLastStep && (
-                              <div className="kill-chain-arrow">
-                                <ChevronDown size={24} />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Mitigations Section (Expandable) - Defense in Depth */}
-                  <div className="mitigations-section">
-                    <button
-                      className="btn btn-secondary mitigations-toggle"
-                      onClick={() => togglePathExpanded(pathIndex)}
-                    >
-                      <Shield size={16} />
-                      {isExpanded ? 'Hide Defense-in-Depth Mitigations' : 'Show Defense-in-Depth Mitigations'}
-                    </button>
-
-                    {isExpanded && (
-                      <div className="mitigations-content">
-                        <div className="mitigations-header">
-                          <div>
-                            <h5>Defense-in-Depth Mitigations</h5>
-                            <p style={{fontSize: '0.875rem', color: '#64748b', margin: '0.5rem 0'}}>
-                              Multiple layers of security controls following Cyber by Design principles
-                            </p>
-                          </div>
-                          <div className="mitigations-header-actions">
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => selectAllMitigations(path)}
-                            >
-                              <CheckCircle size={14} />
-                              Select All
-                            </button>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => copyMitigationsToClipboard(path.steps)}
-                            >
-                              Copy All
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Defense Layer Legend */}
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                          gap: '0.75rem',
-                          margin: '1rem 0',
-                          padding: '1rem',
-                          background: '#f8fafc',
-                          borderRadius: '0.5rem',
-                        }}>
-                          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                            <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#10b981'}}></div>
-                            <span style={{fontSize: '0.875rem', fontWeight: 500}}>Preventive</span>
-                          </div>
-                          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                            <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6'}}></div>
-                            <span style={{fontSize: '0.875rem', fontWeight: 500}}>Detective</span>
-                          </div>
-                          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                            <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b'}}></div>
-                            <span style={{fontSize: '0.875rem', fontWeight: 500}}>Corrective</span>
-                          </div>
-                          <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                            <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#8b5cf6'}}></div>
-                            <span style={{fontSize: '0.875rem', fontWeight: 500}}>Administrative</span>
-                          </div>
-                        </div>
-
-                        {/* Mitigations by Step */}
-                        <div className="mitigations-by-step">
-                          {path.steps?.map((step, stepIndex) => {
-                            const mitigationsByLayer = step.mitigations_by_layer || {};
-                            const hasMitigations = Object.keys(mitigationsByLayer).length > 0;
-
-                            // Fallback to single mitigation if no layered mitigations
-                            const singleMitigation = step.mitigation;
-
-                            if (!hasMitigations && !singleMitigation) return null;
-
-                            return (
-                              <div key={stepIndex} className="step-mitigations-container" style={{
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '0.5rem',
-                                padding: '1rem',
-                                marginBottom: '1rem',
-                              }}>
-                                {/* Step Header */}
-                                <div style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.75rem',
-                                  marginBottom: '1rem',
-                                  paddingBottom: '0.75rem',
-                                  borderBottom: '2px solid #e2e8f0',
-                                }}>
-                                  <span style={{
-                                    background: '#3b82f6',
-                                    color: 'white',
-                                    padding: '0.25rem 0.75rem',
-                                    borderRadius: '0.25rem',
-                                    fontWeight: 600,
-                                    fontSize: '0.875rem',
-                                  }}>
-                                    Step {step.step_number}
-                                  </span>
-                                  <div>
-                                    <div style={{fontWeight: 600, fontSize: '0.9375rem'}}>{step.technique_id} - {step.technique_name}</div>
-                                    <div style={{fontSize: '0.8125rem', color: '#64748b'}}>{step.kill_chain_phase}</div>
-                                  </div>
-                                </div>
-
-                                {/* Defense Layers */}
-                                {hasMitigations ? (
-                                  <div className="defense-layers">
-                                    {/* Preventive Layer */}
-                                    {mitigationsByLayer.preventive && mitigationsByLayer.preventive.length > 0 && (
-                                      <div className="defense-layer" style={{marginBottom: '1rem'}}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginBottom: '0.75rem',
-                                          fontSize: '0.9375rem',
-                                          fontWeight: 600,
-                                          color: '#10b981',
-                                        }}>
-                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#10b981'}}></div>
-                                          Preventive Controls ({mitigationsByLayer.preventive.length})
-                                        </div>
-                                        {mitigationsByLayer.preventive.map((mit, mitIndex) => renderLayeredMitigation(mit, step, path.id, mitIndex, 'preventive'))}
-                                      </div>
-                                    )}
-
-                                    {/* Detective Layer */}
-                                    {mitigationsByLayer.detective && mitigationsByLayer.detective.length > 0 && (
-                                      <div className="defense-layer" style={{marginBottom: '1rem'}}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginBottom: '0.75rem',
-                                          fontSize: '0.9375rem',
-                                          fontWeight: 600,
-                                          color: '#3b82f6',
-                                        }}>
-                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6'}}></div>
-                                          Detective Controls ({mitigationsByLayer.detective.length})
-                                        </div>
-                                        {mitigationsByLayer.detective.map((mit, mitIndex) => renderLayeredMitigation(mit, step, path.id, mitIndex, 'detective'))}
-                                      </div>
-                                    )}
-
-                                    {/* Corrective Layer */}
-                                    {mitigationsByLayer.corrective && mitigationsByLayer.corrective.length > 0 && (
-                                      <div className="defense-layer" style={{marginBottom: '1rem'}}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginBottom: '0.75rem',
-                                          fontSize: '0.9375rem',
-                                          fontWeight: 600,
-                                          color: '#f59e0b',
-                                        }}>
-                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b'}}></div>
-                                          Corrective Controls ({mitigationsByLayer.corrective.length})
-                                        </div>
-                                        {mitigationsByLayer.corrective.map((mit, mitIndex) => renderLayeredMitigation(mit, step, path.id, mitIndex, 'corrective'))}
-                                      </div>
-                                    )}
-
-                                    {/* Administrative Layer */}
-                                    {mitigationsByLayer.administrative && mitigationsByLayer.administrative.length > 0 && (
-                                      <div className="defense-layer" style={{marginBottom: '1rem'}}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginBottom: '0.75rem',
-                                          fontSize: '0.9375rem',
-                                          fontWeight: 600,
-                                          color: '#8b5cf6',
-                                        }}>
-                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#8b5cf6'}}></div>
-                                          Administrative Controls ({mitigationsByLayer.administrative.length})
-                                        </div>
-                                        {mitigationsByLayer.administrative.map((mit, mitIndex) => renderLayeredMitigation(mit, step, path.id, mitIndex, 'administrative'))}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  /* Fallback: Show single mitigation if no layered mitigations */
-                                  singleMitigation && renderSingleMitigation(singleMitigation, step, path.id)
-                                )}
-                              </div>
-                            );
-
-                            // Helper function to render layered mitigation
-                            function renderLayeredMitigation(mitigation, step, pathId, mitIndex, layer) {
-                              const selectionKey = `${pathId}:${step.step_number}:${mitigation.mitigation_id}`;
-                              const isSelected = selectedMitigations[selectionKey] || false;
-
-                              const priorityColors = {
-                                critical: {bg: '#fee2e2', text: '#991b1b'},
-                                high: {bg: '#fed7aa', text: '#9a3412'},
-                                medium: {bg: '#fef3c7', text: '#92400e'},
-                                low: {bg: '#dbeafe', text: '#1e40af'},
-                              };
-                              const priorityColor = priorityColors[mitigation.priority] || priorityColors.medium;
-
-                              const layerColors = {
-                                preventive: '#10b981',
-                                detective: '#3b82f6',
-                                corrective: '#f59e0b',
-                                administrative: '#8b5cf6'
-                              };
-
-                              return (
-                                <div key={mitIndex} style={{
-                                  background: '#f8fafc',
-                                  border: '1px solid #e2e8f0',
-                                  borderLeft: `4px solid ${layerColors[layer]}`,
-                                  borderRadius: '0.375rem',
-                                  padding: '0.75rem',
-                                  marginBottom: '0.5rem',
-                                }}>
-                                  <div style={{display: 'flex', alignItems: 'flex-start', gap: '0.75rem'}}>
-                                    {/* Checkbox */}
-                                    <input
-                                      type="checkbox"
-                                      id={selectionKey}
-                                      checked={isSelected}
-                                      onChange={() => toggleMitigationSelection(pathId, step.step_number, mitigation.mitigation_id)}
-                                      style={{marginTop: '0.25rem'}}
-                                    />
-
-                                    {/* Mitigation Content */}
-                                    <div style={{flex: 1}}>
-                                      {/* Title Row */}
-                                      <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap'}}>
-                                        <strong style={{fontSize: '0.875rem'}}>{mitigation.mitigation_id}</strong>
-                                        <span style={{fontSize: '0.875rem'}}>{mitigation.mitigation_name}</span>
-                                        {mitigation.priority && (
-                                          <span style={{
-                                            padding: '0.125rem 0.5rem',
-                                            borderRadius: '0.25rem',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 600,
-                                            textTransform: 'uppercase',
-                                            background: priorityColor.bg,
-                                            color: priorityColor.text,
-                                          }}>
-                                            {mitigation.priority}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {/* Description */}
-                                      <p style={{fontSize: '0.8125rem', color: '#475569', marginBottom: '0.5rem'}}>
-                                        {mitigation.description}
-                                      </p>
-
-                                      {/* AWS Action */}
-                                      {mitigation.aws_service_action && (
-                                        <div style={{
-                                          background: '#1e293b',
-                                          color: '#e2e8f0',
-                                          padding: '0.5rem',
-                                          borderRadius: '0.25rem',
-                                          fontSize: '0.8125rem',
-                                          fontFamily: 'monospace',
-                                          marginBottom: '0.5rem',
-                                        }}>
-                                          <strong style={{color: '#fbbf24'}}>AWS Action:</strong> {mitigation.aws_service_action}
-                                        </div>
-                                      )}
-
-                                      {/* Implementation Details */}
-                                      <div style={{display: 'flex', gap: '1rem', fontSize: '0.75rem', color: '#64748b', flexWrap: 'wrap'}}>
-                                        {mitigation.implementation_effort && (
-                                          <span>⏱️ {mitigation.implementation_effort}</span>
-                                        )}
-                                        {mitigation.effectiveness && (
-                                          <span>📊 {mitigation.effectiveness}</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            // Helper function for single mitigation (backward compatibility)
-                            function renderSingleMitigation(mitigation, step, pathId) {
-                              const selectionKey = `${pathId}:${step.step_number}:${mitigation.mitigation_id}`;
-                              const isSelected = selectedMitigations[selectionKey] || false;
-
-                              return (
-                                <div style={{
-                                  background: '#f8fafc',
-                                  border: '1px solid #e2e8f0',
-                                  borderRadius: '0.375rem',
-                                  padding: '0.75rem',
-                                }}>
-                                  <div style={{display: 'flex', alignItems: 'flex-start', gap: '0.75rem'}}>
-                                    <input
-                                      type="checkbox"
-                                      id={selectionKey}
-                                      checked={isSelected}
-                                      onChange={() => toggleMitigationSelection(pathId, step.step_number, mitigation.mitigation_id)}
-                                      style={{marginTop: '0.25rem'}}
-                                    />
-                                    <div style={{flex: 1}}>
-                                      <div style={{marginBottom: '0.5rem'}}>
-                                        <strong>{mitigation.mitigation_id}</strong> - {mitigation.mitigation_name}
-                                      </div>
-                                      <p style={{fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem'}}>
-                                        {mitigation.description}
-                                      </p>
-                                      {mitigation.aws_service_action && (
-                                        <div style={{
-                                          background: '#1e293b',
-                                          color: '#e2e8f0',
-                                          padding: '0.5rem',
-                                          borderRadius: '0.25rem',
-                                          fontSize: '0.8125rem',
-                                          fontFamily: 'monospace',
-                                        }}>
-                                          <strong style={{color: '#fbbf24'}}>AWS Action:</strong> {mitigation.aws_service_action}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Provenance Footer (Collapsed by default) */}
-                  <details className="provenance-section">
-                    <summary className="provenance-toggle">
-                      <span>View Evaluation Details & Provenance</span>
-                    </summary>
-
-                    <div className="provenance-content">
-                      {/* Validation Notes */}
-                      {path.validation_notes && (
-                        <div className="provenance-item">
-                          <h6>Validation Notes</h6>
-                          <p>{path.validation_notes}</p>
-                        </div>
-                      )}
-
-                      {/* Challenge Resolution */}
-                      {path.challenged && path.challenge_resolution && (
-                        <div className="provenance-item">
-                          <h6>Challenge Resolution</h6>
-                          <p>{path.challenge_resolution}</p>
-                        </div>
-                      )}
-
-                      {/* Evaluation Scores */}
-                      {evaluation.composite_score && (
-                        <div className="provenance-item">
-                          <h6>Evaluation Scores</h6>
-                          <div className="evaluation-scores-grid">
-                            <div className="eval-score-item">
-                              <span className="eval-label">Feasibility</span>
-                              <span className="eval-value">{evaluation.feasibility_score || 0}/10</span>
-                            </div>
-                            <div className="eval-score-item">
-                              <span className="eval-label">Detection Difficulty</span>
-                              <span className="eval-value">{evaluation.detection_score || 0}/10</span>
-                            </div>
-                            <div className="eval-score-item">
-                              <span className="eval-label">Impact</span>
-                              <span className="eval-value">{evaluation.impact_score || 0}/10</span>
-                            </div>
-                            <div className="eval-score-item">
-                              <span className="eval-label">Novelty</span>
-                              <span className="eval-value">{evaluation.novelty_score || 0}/10</span>
-                            </div>
-                            <div className="eval-score-item">
-                              <span className="eval-label">Coherence</span>
-                              <span className="eval-value">{evaluation.coherence_score || 0}/10</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </details>
-                </div>
-              );
-            })}
 
             {/* Apply Mitigations Action Bar */}
             <div className="mitigation-action-bar">

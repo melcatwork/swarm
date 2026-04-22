@@ -11,6 +11,8 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Network, CheckCircle, TrendingUp, AlertCircle, Users, Shield, Copy } from 'lucide-react';
 import SharedAttackGraph from './SharedAttackGraph';
+import CsaRiskSummary from './CsaRiskSummary';
+import CsaPathCard from './CsaPathCard';
 import './StigmergicResultsView.css';
 
 const StigmergicResultsView = ({ results }) => {
@@ -26,6 +28,7 @@ const StigmergicResultsView = ({ results }) => {
   const [expandedMitigations, setExpandedMitigations] = useState(new Set());
   const [selectedMitigations, setSelectedMitigations] = useState({});
   const [toast, setToast] = useState(null);
+  const [showAssetDetails, setShowAssetDetails] = useState(false);
 
   if (!results) return null;
 
@@ -257,248 +260,186 @@ const StigmergicResultsView = ({ results }) => {
         <div className="section-header" onClick={() => toggleSection('assetGraph')}>
           <h3>
             <Shield size={20} />
-            Infrastructure Asset Graph ({asset_graph.assets.length} assets)
+            Infrastructure Asset Graph
           </h3>
           {expandedSections.assetGraph ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </div>
 
         {expandedSections.assetGraph && (
-          <div className="asset-table-container">
-            {Object.entries(groupAssetsByBoundary(asset_graph)).map(([boundary, assets]) => (
-              <div key={boundary} className="boundary-group" style={{marginBottom: '1.5rem'}}>
-                <h4 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  marginBottom: '0.75rem',
-                  padding: '0.75rem',
-                  background: '#f1f5f9',
-                  borderRadius: '0.375rem',
-                }}>
-                  <Shield size={16} />
-                  {boundary}
-                  <span style={{
-                    marginLeft: 'auto',
-                    fontSize: '0.875rem',
-                    fontWeight: 500,
-                    color: '#64748b'
-                  }}>({assets.length} assets)</span>
-                </h4>
-                <table style={{
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  fontSize: '0.875rem'
-                }}>
-                  <thead>
-                    <tr style={{background: '#f8fafc', borderBottom: '2px solid #e2e8f0'}}>
-                      <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Asset Name</th>
-                      <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Type</th>
-                      <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Service</th>
-                      <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Internet Facing</th>
-                      <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Trust Boundary</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assets.map((asset, idx) => (
-                      <tr key={idx} style={{borderBottom: '1px solid #e2e8f0'}}>
-                        <td style={{padding: '0.75rem', fontWeight: 500}}>{asset.name}</td>
-                        <td style={{padding: '0.75rem', color: '#64748b'}}>{asset.type}</td>
-                        <td style={{padding: '0.75rem', color: '#64748b'}}>{asset.service}</td>
-                        <td style={{padding: '0.75rem'}}>
-                          {asset.properties?.internet_facing ? (
-                            <span style={{
-                              padding: '0.25rem 0.5rem',
-                              borderRadius: '0.25rem',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              background: '#fee2e2',
-                              color: '#991b1b'
-                            }}>Yes</span>
-                          ) : (
-                            <span style={{
-                              padding: '0.25rem 0.5rem',
-                              borderRadius: '0.25rem',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              background: '#dcfce7',
-                              color: '#166534'
-                            }}>No</span>
-                          )}
-                        </td>
-                        <td style={{padding: '0.75rem', color: '#64748b'}}>{asset.trust_boundary || 'unknown'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Section 2: EVALUATION SUMMARY
-  const renderEvaluationSummary = () => {
-    const evalStats = calculateEvaluationStats(attack_paths);
-    if (!evalStats) return null;
-
-    return (
-      <div className="stigmergic-section">
-        <div className="section-header" onClick={() => toggleSection('evaluation')}>
-          <h3>
-            📊 Evaluation Summary
-          </h3>
-          {expandedSections.evaluation ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </div>
-
-        {expandedSections.evaluation && (
-          <div style={{padding: '1rem'}}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '1.5rem'
-            }}>
-              <p style={{fontSize: '0.875rem', color: '#64748b', margin: 0}}>
-                Multi-criteria scoring across {attack_paths.length} attack path{attack_paths.length !== 1 ? 's' : ''}
-              </p>
-              <div style={{
-                textAlign: 'center',
-                padding: '1rem',
-                background: '#f8fafc',
-                borderRadius: '0.5rem',
-                border: '2px solid #e2e8f0'
-              }}>
-                <div style={{fontSize: '2rem', fontWeight: 700, color: '#0f172a'}}>
-                  {evalStats.composite.avg.toFixed(1)}
-                </div>
-                <div style={{fontSize: '0.75rem', fontWeight: 500, color: '#64748b', marginTop: '0.25rem'}}>
-                  Avg Risk Score
-                </div>
-              </div>
-            </div>
-
-            {/* Metrics Grid */}
+          <div>
+            {/* Summary Stats - Always Visible */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gridTemplateColumns: 'repeat(3, 1fr)',
               gap: '1rem',
               marginBottom: '1.5rem'
             }}>
-              {['feasibility', 'impact', 'detection', 'novelty', 'coherence', 'composite'].map(metric => {
-                const icons = {
-                  feasibility: '🎯',
-                  impact: '💥',
-                  detection: '🕵️',
-                  novelty: '✨',
-                  coherence: '🧩',
-                  composite: '📈'
-                };
-                const colors = {
-                  feasibility: '#3b82f6',
-                  impact: '#ef4444',
-                  detection: '#8b5cf6',
-                  novelty: '#f59e0b',
-                  coherence: '#10b981',
-                  composite: '#0f172a'
-                };
-                return (
-                  <div key={metric} style={{
-                    padding: '1rem',
-                    background: '#f8fafc',
-                    borderRadius: '0.5rem',
-                    border: '1px solid #e2e8f0'
-                  }}>
-                    <div style={{
+              <div style={{
+                padding: '1.25rem',
+                background: '#f8fafc',
+                borderRadius: '0.5rem',
+                textAlign: 'center',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.25rem' }}>
+                  {asset_graph.assets?.length || 0}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 500 }}>
+                  Total Assets
+                </div>
+              </div>
+              <div style={{
+                padding: '1.25rem',
+                background: '#f8fafc',
+                borderRadius: '0.5rem',
+                textAlign: 'center',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.25rem' }}>
+                  {asset_graph.relationships?.length || 0}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 500 }}>
+                  Relationships
+                </div>
+              </div>
+              <div style={{
+                padding: '1.25rem',
+                background: '#f8fafc',
+                borderRadius: '0.5rem',
+                textAlign: 'center',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.25rem' }}>
+                  {asset_graph.trust_boundaries?.length || 0}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 500 }}>
+                  Trust Boundaries
+                </div>
+              </div>
+            </div>
+
+            {/* Toggle Button for Details */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+              <button
+                onClick={() => setShowAssetDetails(!showAssetDetails)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.5rem 1rem',
+                  background: 'white',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '0.375rem',
+                  color: '#64748b',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f8fafc';
+                  e.currentTarget.style.borderColor = '#cbd5e1';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'white';
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                }}
+              >
+                {showAssetDetails ? (
+                  <>
+                    <ChevronUp size={16} />
+                    Hide Asset Details
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={16} />
+                    Show Asset Details
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Detailed Asset Table - Collapsible */}
+            {showAssetDetails && (
+              <div className="asset-table-container">
+                {Object.entries(groupAssetsByBoundary(asset_graph)).map(([boundary, assets]) => (
+                  <div key={boundary} className="boundary-group" style={{marginBottom: '1.5rem'}}>
+                    <h4 style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.5rem',
-                      marginBottom: '0.75rem'
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      marginBottom: '0.75rem',
+                      padding: '0.75rem',
+                      background: '#f1f5f9',
+                      borderRadius: '0.375rem',
                     }}>
-                      <span>{icons[metric]}</span>
-                      <span style={{fontSize: '0.875rem', fontWeight: 600, textTransform: 'capitalize'}}>
-                        {metric}
-                      </span>
-                    </div>
-                    <div style={{fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem'}}>
-                      {evalStats[metric].avg.toFixed(1)}/10
-                    </div>
-                    <div style={{fontSize: '0.75rem', color: '#64748b'}}>
-                      Range: {evalStats[metric].min.toFixed(1)} - {evalStats[metric].max.toFixed(1)}
-                    </div>
-                    <div style={{
-                      marginTop: '0.5rem',
-                      height: '4px',
-                      background: '#e2e8f0',
-                      borderRadius: '2px',
-                      overflow: 'hidden'
+                      <Shield size={16} />
+                      {boundary}
+                      <span style={{
+                        marginLeft: 'auto',
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        color: '#64748b'
+                      }}>({assets.length} assets)</span>
+                    </h4>
+                    <table style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      fontSize: '0.875rem'
                     }}>
-                      <div style={{
-                        height: '100%',
-                        width: `${(evalStats[metric].avg / 10) * 100}%`,
-                        background: colors[metric],
-                        transition: 'width 0.3s ease'
-                      }}></div>
-                    </div>
+                      <thead>
+                        <tr style={{background: '#f8fafc', borderBottom: '2px solid #e2e8f0'}}>
+                          <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Asset Name</th>
+                          <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Type</th>
+                          <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Service</th>
+                          <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Internet Facing</th>
+                          <th style={{padding: '0.75rem', textAlign: 'left', fontWeight: 600}}>Trust Boundary</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assets.map((asset, idx) => (
+                          <tr key={idx} style={{borderBottom: '1px solid #e2e8f0'}}>
+                            <td style={{padding: '0.75rem', fontWeight: 500}}>{asset.name}</td>
+                            <td style={{padding: '0.75rem', color: '#64748b'}}>{asset.type}</td>
+                            <td style={{padding: '0.75rem', color: '#64748b'}}>{asset.service}</td>
+                            <td style={{padding: '0.75rem'}}>
+                              {asset.properties?.internet_facing ? (
+                                <span style={{
+                                  padding: '0.25rem 0.5rem',
+                                  borderRadius: '0.25rem',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  background: '#fee2e2',
+                                  color: '#991b1b'
+                                }}>Yes</span>
+                              ) : (
+                                <span style={{
+                                  padding: '0.25rem 0.5rem',
+                                  borderRadius: '0.25rem',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  background: '#dcfce7',
+                                  color: '#166534'
+                                }}>No</span>
+                              )}
+                            </td>
+                            <td style={{padding: '0.75rem', color: '#64748b'}}>{asset.trust_boundary || 'unknown'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Key Findings */}
-            <div style={{
-              padding: '1rem',
-              background: '#f1f5f9',
-              borderRadius: '0.5rem',
-              border: '1px solid #cbd5e1'
-            }}>
-              <h4 style={{fontSize: '0.9375rem', marginBottom: '0.75rem', color: '#1e293b'}}>
-                🔍 Key Findings
-              </h4>
-              <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem'}}>
-                {evalStats.composite.avg >= 7.0 && (
-                  <div style={{
-                    padding: '0.5rem',
-                    background: '#fee2e2',
-                    borderLeft: '4px solid #ef4444',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.875rem'
-                  }}>
-                    <strong style={{color: '#991b1b'}}>Critical:</strong> High average composite score ({evalStats.composite.avg.toFixed(1)}/10) indicates significant threat exposure
-                  </div>
-                )}
-                {evalStats.feasibility.avg >= 7.0 && (
-                  <div style={{
-                    padding: '0.5rem',
-                    background: '#fed7aa',
-                    borderLeft: '4px solid #f97316',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.875rem'
-                  }}>
-                    <strong style={{color: '#9a3412'}}>High:</strong> Attack paths demonstrate high feasibility ({evalStats.feasibility.avg.toFixed(1)}/10) - immediate action recommended
-                  </div>
-                )}
-                {evalStats.composite.avg < 5.0 && (
-                  <div style={{
-                    padding: '0.5rem',
-                    background: '#dbeafe',
-                    borderLeft: '4px solid #3b82f6',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.875rem'
-                  }}>
-                    <strong style={{color: '#1e40af'}}>Low:</strong> Overall risk score is moderate ({evalStats.composite.avg.toFixed(1)}/10) - standard security posture adequate
-                  </div>
-                )}
+                ))}
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
     );
   };
+
 
   // Section 3: SWARM EXECUTION TIMELINE
   const renderExecutionTimeline = () => (
@@ -754,616 +695,22 @@ const StigmergicResultsView = ({ results }) => {
 
         {expandedSections.paths && (
           <div className="paths-container">
-            {attack_paths.map((path, pathIndex) => {
-              const isExpanded = expandedPaths.has(pathIndex);
-              const impactColor = getImpactTypeColor(path.impact_type);
-              const evaluation = path.evaluation || {};
-              const compositeScore = evaluation.composite_score || path.composite_score;
-
-              // Calculate confidence from composite score if not explicitly set
-              let confidence = path.confidence;
-              if (!confidence && compositeScore) {
-                confidence = compositeScore >= 7 ? 'high' : compositeScore >= 5 ? 'medium' : 'low';
-              }
-              const confidenceBadge = confidence ? getConfidenceBadge(confidence) : null;
-
-              return (
-                <div key={pathIndex} className="attack-path-card-stigmergic">
-                  {/* Header */}
-                  <div className="path-header-stigmergic">
-                    <div style={{ flex: 1, minWidth: '300px' }}>
-                      <div className="path-title-section">
-                        <h4 className="path-name">{path.name}</h4>
-                        {path.objective && (
-                          <div className="path-objective">
-                            <strong>Objective:</strong> {path.objective}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="path-badges-section">
-                      <span className="badge badge-actor">{path.threat_actor || 'Unknown Actor'}</span>
-                      <span
-                        className="badge badge-impact"
-                        style={{ backgroundColor: impactColor.bg, color: impactColor.text }}
-                      >
-                        {impactColor.label}
-                      </span>
-                      <span className="badge badge-difficulty">{path.difficulty}</span>
-
-                      {/* Challenged badge */}
-                      {path.challenged && (
-                        <span className="badge badge-challenged">Challenged</span>
-                      )}
-
-                      {/* Confidence badge */}
-                      {confidenceBadge && (
-                        <span
-                          className="badge badge-confidence"
-                          style={{ backgroundColor: confidenceBadge.bg, color: confidenceBadge.color }}
-                        >
-                          {confidenceBadge.label}
-                        </span>
-                      )}
-
-                      {/* Swarm indicators */}
-                      {path.reinforces_swarm && (
-                        <span className="badge badge-reinforces">
-                          <CheckCircle size={12} />
-                          Reinforces Swarm
-                        </span>
-                      )}
-                      {path.diverges_from_swarm && (
-                        <span className="badge badge-diverges">
-                          <TrendingUp size={12} />
-                          Diverges from Swarm
-                        </span>
-                      )}
-                      </div>
-                    </div>
-
-                    {/* Score circle indicator */}
-                    {compositeScore && (
-                      <div className="path-score-indicator">
-                        <div className="score-circle">
-                          <span className="score-value">{compositeScore.toFixed(1)}</span>
-                          <span className="score-label">/10</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Kill Chain Steps */}
-                  <button
-                    className="expand-toggle"
-                    onClick={() => togglePath(pathIndex)}
-                  >
-                    {isExpanded ? (
-                      <>
-                        <ChevronUp size={16} />
-                        Hide Details
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown size={16} />
-                        Show {path.steps?.length || 0} Steps
-                      </>
-                    )}
-                  </button>
-
-                  {isExpanded && path.steps && (
-                    <div className="kill-chain-container">
-                      {path.steps.map((step, stepIndex) => {
-                        const phaseColor = getKillChainPhaseColor(step.kill_chain_phase);
-                        const isLastStep = stepIndex === path.steps.length - 1;
-
-                        return (
-                          <div key={stepIndex} className="kill-chain-step-wrapper">
-                            <div className="kill-chain-step" style={{ borderColor: phaseColor.border }}>
-                              <div
-                                className="step-phase-header"
-                                style={{
-                                  backgroundColor: phaseColor.bg,
-                                  color: phaseColor.text,
-                                  borderBottom: `2px solid ${phaseColor.border}`
-                                }}
-                              >
-                                <span className="step-number-badge">{step.step_number || stepIndex + 1}</span>
-                                <span className="phase-name">{step.kill_chain_phase}</span>
-                              </div>
-
-                              <div className="step-content">
-                                <div className="step-technique-row">
-                                  <a
-                                    href={formatTechniqueUrl(step.technique_id)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="technique-badge"
-                                    title="View on MITRE ATT&CK"
-                                  >
-                                    {step.technique_id}
-                                  </a>
-                                  <span className="technique-name-display">{step.technique_name}</span>
-                                </div>
-
-                                <div className="step-target-row">
-                                  <strong>Target:</strong> <code>{step.target_asset}</code>
-                                </div>
-
-                                <p className="step-action">
-                                  {step.action_description || step.description}
-                                </p>
-
-                                {step.outcome && (
-                                  <div className="step-outcome-box">
-                                    <strong>Outcome:</strong> {step.outcome}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {!isLastStep && (
-                              <div className="kill-chain-arrow">
-                                <ChevronDown size={24} />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Defence-in-Depth Mitigations Section */}
-                  {isExpanded && path.steps && (
-                    <div style={{marginTop: '1rem'}}>
-                      <button
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          padding: '0.75rem 1rem',
-                          width: '100%',
-                          background: expandedMitigations.has(pathIndex) ? '#dbeafe' : '#f1f5f9',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: '0.375rem',
-                          cursor: 'pointer',
-                          fontSize: '0.9375rem',
-                          fontWeight: 600,
-                          color: '#0f172a',
-                          transition: 'all 0.2s'
-                        }}
-                        onClick={() => toggleMitigations(pathIndex)}
-                      >
-                        <Shield size={16} />
-                        {expandedMitigations.has(pathIndex) ? 'Hide Defence-in-Depth Mitigations' : 'Show Defence-in-Depth Mitigations'}
-                      </button>
-
-                      {expandedMitigations.has(pathIndex) && (
-                        <div style={{
-                          marginTop: '1rem',
-                          padding: '1rem',
-                          background: '#f8fafc',
-                          borderRadius: '0.375rem',
-                          border: '1px solid #e2e8f0'
-                        }}>
-                          <div style={{marginBottom: '1rem'}}>
-                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.75rem'}}>
-                              <div>
-                                <h5 style={{fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem'}}>
-                                  Defence-in-Depth Mitigations
-                                </h5>
-                                <p style={{fontSize: '0.875rem', color: '#64748b'}}>
-                                  Multiple layers of security controls following Cyber by Design principles
-                                </p>
-                              </div>
-                              <div style={{display: 'flex', gap: '0.5rem', flexShrink: 0}}>
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => selectAllMitigations(path)}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.375rem',
-                                    padding: '0.375rem 0.75rem',
-                                    fontSize: '0.8125rem',
-                                    background: 'white',
-                                    border: '1px solid #cbd5e1',
-                                    borderRadius: '0.375rem',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
-                                  onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                                >
-                                  <CheckCircle size={14} />
-                                  Select All
-                                </button>
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => copyMitigationsToClipboard(path)}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.375rem',
-                                    padding: '0.375rem 0.75rem',
-                                    fontSize: '0.8125rem',
-                                    background: 'white',
-                                    border: '1px solid #cbd5e1',
-                                    borderRadius: '0.375rem',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
-                                  onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                                >
-                                  <Copy size={14} />
-                                  Copy All
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Defense Layer Legend */}
-                          <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                            gap: '0.75rem',
-                            marginBottom: '1.5rem',
-                            padding: '1rem',
-                            background: '#f1f5f9',
-                            borderRadius: '0.375rem'
-                          }}>
-                            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                              <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#10b981'}}></div>
-                              <span style={{fontSize: '0.875rem', fontWeight: 500}}>Preventive</span>
-                            </div>
-                            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                              <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6'}}></div>
-                              <span style={{fontSize: '0.875rem', fontWeight: 500}}>Detective</span>
-                            </div>
-                            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                              <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b'}}></div>
-                              <span style={{fontSize: '0.875rem', fontWeight: 500}}>Corrective</span>
-                            </div>
-                            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                              <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#8b5cf6'}}></div>
-                              <span style={{fontSize: '0.875rem', fontWeight: 500}}>Administrative</span>
-                            </div>
-                          </div>
-
-                          {/* Mitigations by Step */}
-                          {path.steps.map((step, stepIndex) => {
-                            const mitigationsByLayer = step.mitigations_by_layer || {};
-                            const hasMitigations = Object.keys(mitigationsByLayer).length > 0;
-                            const singleMitigation = step.mitigation;
-
-                            if (!hasMitigations && !singleMitigation) return null;
-
-                            const renderLayeredMitigation = (mitigation, layer, stepNumber, pathId) => {
-                              const selectionKey = `${pathId}:${stepNumber}:${mitigation.mitigation_id}`;
-                              const isSelected = selectedMitigations[selectionKey] || false;
-
-                              const priorityColors = {
-                                critical: {bg: '#fee2e2', text: '#991b1b'},
-                                high: {bg: '#fed7aa', text: '#9a3412'},
-                                medium: {bg: '#fef3c7', text: '#92400e'},
-                                low: {bg: '#dbeafe', text: '#1e40af'},
-                              };
-                              const priorityColor = priorityColors[mitigation.priority] || priorityColors.medium;
-
-                              const layerColors = {
-                                preventive: '#10b981',
-                                detective: '#3b82f6',
-                                corrective: '#f59e0b',
-                                administrative: '#8b5cf6'
-                              };
-
-                              return (
-                                <div key={mitigation.mitigation_id} style={{
-                                  background: '#f8fafc',
-                                  border: '1px solid #e2e8f0',
-                                  borderLeft: `4px solid ${layerColors[layer]}`,
-                                  borderRadius: '0.375rem',
-                                  padding: '0.75rem',
-                                  marginBottom: '0.5rem'
-                                }}>
-                                  <div style={{display: 'flex', alignItems: 'flex-start', gap: '0.75rem'}}>
-                                    {/* Checkbox */}
-                                    <input
-                                      type="checkbox"
-                                      id={selectionKey}
-                                      checked={isSelected}
-                                      onChange={() => toggleMitigationSelection(pathId, stepNumber, mitigation.mitigation_id)}
-                                      style={{marginTop: '0.25rem'}}
-                                    />
-
-                                    {/* Mitigation Content */}
-                                    <div style={{flex: 1}}>
-                                      {/* Title Row */}
-                                      <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap'}}>
-                                        <strong style={{fontSize: '0.875rem'}}>{mitigation.mitigation_id}</strong>
-                                        <span style={{fontSize: '0.875rem'}}>{mitigation.mitigation_name}</span>
-                                        {mitigation.priority && (
-                                          <span style={{
-                                            padding: '0.125rem 0.5rem',
-                                            borderRadius: '0.25rem',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 600,
-                                            textTransform: 'uppercase',
-                                            background: priorityColor.bg,
-                                            color: priorityColor.text,
-                                          }}>
-                                            {mitigation.priority}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {/* Description */}
-                                      <p style={{fontSize: '0.8125rem', color: '#475569', marginBottom: '0.5rem'}}>
-                                        {mitigation.description}
-                                      </p>
-
-                                      {/* AWS Action */}
-                                      {mitigation.aws_service_action && (
-                                        <div style={{
-                                          background: '#1e293b',
-                                          color: '#e2e8f0',
-                                          padding: '0.5rem',
-                                          borderRadius: '0.25rem',
-                                          fontSize: '0.8125rem',
-                                          fontFamily: 'monospace',
-                                          marginBottom: '0.5rem',
-                                        }}>
-                                          <strong style={{color: '#fbbf24'}}>AWS Action:</strong> {mitigation.aws_service_action}
-                                        </div>
-                                      )}
-
-                                      {/* Implementation Details */}
-                                      <div style={{display: 'flex', gap: '1rem', fontSize: '0.75rem', color: '#64748b', flexWrap: 'wrap'}}>
-                                        {mitigation.implementation_effort && (
-                                          <span>⏱️ {mitigation.implementation_effort}</span>
-                                        )}
-                                        {mitigation.effectiveness && (
-                                          <span>📊 {mitigation.effectiveness}</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            };
-
-                            return (
-                              <div key={stepIndex} style={{
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '0.5rem',
-                                padding: '1rem',
-                                marginBottom: '1rem',
-                                background: '#ffffff'
-                              }}>
-                                {/* Step Header */}
-                                <div style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.75rem',
-                                  marginBottom: '1rem',
-                                  paddingBottom: '0.75rem',
-                                  borderBottom: '2px solid #e2e8f0'
-                                }}>
-                                  <span style={{
-                                    background: '#3b82f6',
-                                    color: 'white',
-                                    padding: '0.25rem 0.75rem',
-                                    borderRadius: '0.25rem',
-                                    fontWeight: 600,
-                                    fontSize: '0.875rem'
-                                  }}>
-                                    Step {step.step_number}
-                                  </span>
-                                  <div>
-                                    <div style={{fontWeight: 600, fontSize: '0.9375rem'}}>
-                                      {step.technique_id} - {step.technique_name}
-                                    </div>
-                                    <div style={{fontSize: '0.8125rem', color: '#64748b'}}>
-                                      {step.kill_chain_phase}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Defense Layers */}
-                                {hasMitigations ? (
-                                  <div>
-                                    {/* Preventive Layer */}
-                                    {mitigationsByLayer.preventive && mitigationsByLayer.preventive.length > 0 && (
-                                      <div style={{marginBottom: '1rem'}}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginBottom: '0.75rem',
-                                          fontSize: '0.9375rem',
-                                          fontWeight: 600,
-                                          color: '#10b981'
-                                        }}>
-                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#10b981'}}></div>
-                                          Preventive Controls ({mitigationsByLayer.preventive.length})
-                                        </div>
-                                        {mitigationsByLayer.preventive.map(mit => renderLayeredMitigation(mit, 'preventive', step.step_number, path.id || path.name))}
-                                      </div>
-                                    )}
-
-                                    {/* Detective Layer */}
-                                    {mitigationsByLayer.detective && mitigationsByLayer.detective.length > 0 && (
-                                      <div style={{marginBottom: '1rem'}}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginBottom: '0.75rem',
-                                          fontSize: '0.9375rem',
-                                          fontWeight: 600,
-                                          color: '#3b82f6'
-                                        }}>
-                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6'}}></div>
-                                          Detective Controls ({mitigationsByLayer.detective.length})
-                                        </div>
-                                        {mitigationsByLayer.detective.map(mit => renderLayeredMitigation(mit, 'detective', step.step_number, path.id || path.name))}
-                                      </div>
-                                    )}
-
-                                    {/* Corrective Layer */}
-                                    {mitigationsByLayer.corrective && mitigationsByLayer.corrective.length > 0 && (
-                                      <div style={{marginBottom: '1rem'}}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginBottom: '0.75rem',
-                                          fontSize: '0.9375rem',
-                                          fontWeight: 600,
-                                          color: '#f59e0b'
-                                        }}>
-                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b'}}></div>
-                                          Corrective Controls ({mitigationsByLayer.corrective.length})
-                                        </div>
-                                        {mitigationsByLayer.corrective.map(mit => renderLayeredMitigation(mit, 'corrective', step.step_number, path.id || path.name))}
-                                      </div>
-                                    )}
-
-                                    {/* Administrative Layer */}
-                                    {mitigationsByLayer.administrative && mitigationsByLayer.administrative.length > 0 && (
-                                      <div style={{marginBottom: '1rem'}}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          marginBottom: '0.75rem',
-                                          fontSize: '0.9375rem',
-                                          fontWeight: 600,
-                                          color: '#8b5cf6'
-                                        }}>
-                                          <div style={{width: '12px', height: '12px', borderRadius: '50%', background: '#8b5cf6'}}></div>
-                                          Administrative Controls ({mitigationsByLayer.administrative.length})
-                                        </div>
-                                        {mitigationsByLayer.administrative.map(mit => renderLayeredMitigation(mit, 'administrative', step.step_number, path.id || path.name))}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  /* Fallback: Show single mitigation with checkbox */
-                                  singleMitigation && (() => {
-                                    const selectionKey = `${path.id || path.name}:${step.step_number}:${singleMitigation.mitigation_id}`;
-                                    const isSelected = selectedMitigations[selectionKey] || false;
-
-                                    return (
-                                      <div style={{
-                                        background: '#f8fafc',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: '0.375rem',
-                                        padding: '0.75rem'
-                                      }}>
-                                        <div style={{display: 'flex', alignItems: 'flex-start', gap: '0.75rem'}}>
-                                          <input
-                                            type="checkbox"
-                                            id={selectionKey}
-                                            checked={isSelected}
-                                            onChange={() => toggleMitigationSelection(path.id || path.name, step.step_number, singleMitigation.mitigation_id)}
-                                            style={{marginTop: '0.25rem'}}
-                                          />
-                                          <div style={{flex: 1}}>
-                                            <div style={{marginBottom: '0.5rem'}}>
-                                              <strong>{singleMitigation.mitigation_id}</strong> - {singleMitigation.mitigation_name}
-                                            </div>
-                                            <p style={{fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem'}}>
-                                              {singleMitigation.description}
-                                            </p>
-                                            {singleMitigation.aws_service_action && (
-                                              <div style={{
-                                                background: '#1e293b',
-                                                color: '#e2e8f0',
-                                                padding: '0.5rem',
-                                                borderRadius: '0.25rem',
-                                                fontSize: '0.8125rem',
-                                                fontFamily: 'monospace',
-                                              }}>
-                                                <strong style={{color: '#fbbf24'}}>AWS Action:</strong> {singleMitigation.aws_service_action}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })()
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Provenance Footer (Evaluation Details) */}
-                  {isExpanded && (
-                    <details className="provenance-section">
-                      <summary className="provenance-toggle">
-                        <span>▼ View Evaluation Details & Provenance</span>
-                      </summary>
-
-                      <div className="provenance-content">
-                        {/* Evaluation Scores */}
-                        {evaluation.composite_score && (
-                          <div className="provenance-item">
-                            <h6>EVALUATION SCORES</h6>
-                            <div className="evaluation-scores-grid">
-                              <div className="eval-score-item">
-                                <span className="eval-label">Feasibility</span>
-                                <span className="eval-value">{evaluation.feasibility_score || 0}/10</span>
-                              </div>
-                              <div className="eval-score-item">
-                                <span className="eval-label">Detection Difficulty</span>
-                                <span className="eval-value">{evaluation.detection_score || 0}/10</span>
-                              </div>
-                              <div className="eval-score-item">
-                                <span className="eval-label">Impact</span>
-                                <span className="eval-value">{evaluation.impact_score || 0}/10</span>
-                              </div>
-                              <div className="eval-score-item">
-                                <span className="eval-label">Novelty</span>
-                                <span className="eval-value">{evaluation.novelty_score || 0}/10</span>
-                              </div>
-                              <div className="eval-score-item">
-                                <span className="eval-label">Coherence</span>
-                                <span className="eval-value">{evaluation.coherence_score || 0}/10</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Swarm Provenance */}
-                        {(path.reinforces_swarm || path.diverges_from_swarm) && (
-                          <div className="provenance-item">
-                            <h6>Swarm Intelligence</h6>
-                            <p>
-                              {path.reinforces_swarm && 'This path reinforces techniques discovered by multiple agents in the swarm, indicating high-confidence attack vectors.'}
-                              {path.diverges_from_swarm && 'This path explores novel attack vectors not previously discovered by other agents, expanding attack surface coverage.'}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Validation Notes */}
-                        {path.validation_notes && (
-                          <div className="provenance-item">
-                            <h6>Validation Notes</h6>
-                            <p>{path.validation_notes}</p>
-                          </div>
-                        )}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              );
-            })}
+            {/* Attack Paths with CSA Risk Scoring */}
+            {(() => {
+              const paths = results.csa_risk_assessment?.scored_paths || attack_paths || []
+              const sorted = [...paths].sort((a, b) => {
+                const scoreA = a.csa_risk_score?.risk_level ?? 0
+                const scoreB = b.csa_risk_score?.risk_level ?? 0
+                return scoreB - scoreA
+              })
+              return sorted.map((path, i) => (
+                <CsaPathCard
+                  key={path.path_id || path.id || i}
+                  path={path}
+                  defaultExpanded={i === 0}
+                />
+              ))
+            })()}
           </div>
         )}
       </div>
@@ -1424,21 +771,11 @@ const StigmergicResultsView = ({ results }) => {
           <span className="stat-value">{attack_paths.length}</span>
         </div>
         <div className="stat-item">
-          <span className="stat-label">Avg Confidence</span>
+          <span className="stat-label">Execution Time</span>
           <span className="stat-value">
-            {(() => {
-              // Calculate confidence from composite scores if not explicitly set
-              const pathsWithConfidence = attack_paths.map(p => {
-                if (p.confidence) return p;
-                const score = p.evaluation?.composite_score || p.composite_score || 0;
-                const confidence = score >= 7 ? 'high' : score >= 5 ? 'medium' : 'low';
-                return { ...p, confidence };
-              });
-              const high = pathsWithConfidence.filter(p => p.confidence === 'high').length;
-              const medium = pathsWithConfidence.filter(p => p.confidence === 'medium').length;
-              const low = pathsWithConfidence.filter(p => p.confidence === 'low').length;
-              return `${high}H / ${medium}M / ${low}L`;
-            })()}
+            {results.execution_time_seconds
+              ? `${Math.round(results.execution_time_seconds / 60)}m`
+              : 'N/A'}
           </span>
         </div>
         <div className="stat-item">
@@ -1449,18 +786,19 @@ const StigmergicResultsView = ({ results }) => {
               : 'N/A'}
           </span>
         </div>
-        <div className="stat-item">
-          <span className="stat-label">Execution Time</span>
-          <span className="stat-value">
-            {results.execution_time_seconds
-              ? `${Math.round(results.execution_time_seconds / 60)}m`
-              : 'N/A'}
-          </span>
-        </div>
       </div>
 
       {renderInfrastructureAssetGraph()}
-      {renderEvaluationSummary()}
+
+      {/* CSA Risk Assessment Summary */}
+      {results.csa_risk_assessment && (
+        <div className="stigmergic-section">
+          <CsaRiskSummary
+            csaRiskAssessment={results.csa_risk_assessment}
+          />
+        </div>
+      )}
+
       {renderExecutionTimeline()}
       {renderEmergentInsights()}
       {renderSharedGraph()}
