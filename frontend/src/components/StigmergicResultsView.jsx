@@ -14,6 +14,7 @@ import SharedAttackGraph from './SharedAttackGraph';
 import CsaRiskSummary from './CsaRiskSummary';
 import CsaPathCard from './CsaPathCard';
 import MitigationSummary from './MitigationSummary';
+import { analyzePostMitigation } from '../api/client';
 import './StigmergicResultsView.css';
 
 const StigmergicResultsView = ({ results }) => {
@@ -28,6 +29,7 @@ const StigmergicResultsView = ({ results }) => {
   const [expandedPaths, setExpandedPaths] = useState(new Set());
   const [expandedMitigations, setExpandedMitigations] = useState(new Set());
   const [selectedMitigations, setSelectedMitigations] = useState({});
+  const [analyzingMitigations, setAnalyzingMitigations] = useState(false);
   const [toast, setToast] = useState(null);
   const [showAssetDetails, setShowAssetDetails] = useState(false);
 
@@ -80,6 +82,100 @@ const StigmergicResultsView = ({ results }) => {
   // Clear all mitigation selections
   const clearAllMitigations = () => {
     setSelectedMitigations({});
+  };
+
+  // Apply ALL mitigations and run post-mitigation analysis
+  const applyAllMitigations = async () => {
+    if (!attack_paths || attack_paths.length === 0) {
+      setToast({
+        message: 'No attack paths to analyze',
+        type: 'error'
+      });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+
+    // Build selectedMitigations object with ALL mitigations selected
+    const allMitigations = {};
+    const mitigationSelections = [];
+
+    attack_paths.forEach(path => {
+      const pathId = path.id || path.path_id || path.name;
+      const steps = path.steps || [];
+
+      steps.forEach((step, stepIndex) => {
+        const stepNumber = step.step_number || stepIndex + 1;
+        const mitigationsByLayer = step.mitigations_by_layer || {};
+
+        Object.values(mitigationsByLayer).forEach(layerMitigations => {
+          if (Array.isArray(layerMitigations)) {
+            layerMitigations.forEach(mitigation => {
+              const mitigationName = mitigation.mitigation_name;
+              const key = `${pathId}:${stepNumber}:${mitigationName}`;
+
+              allMitigations[key] = true;
+              mitigationSelections.push({
+                path_id: pathId,
+                step_number: stepNumber,
+                mitigation_id: mitigationName,
+                selected: true
+              });
+            });
+          }
+        });
+      });
+    });
+
+    // Update UI with all selections
+    setSelectedMitigations(allMitigations);
+
+    if (mitigationSelections.length === 0) {
+      setToast({
+        message: 'No mitigations found to apply',
+        type: 'error'
+      });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+
+    // Show count to user
+    setToast({
+      message: `Applying all ${mitigationSelections.length} mitigations...`,
+      type: 'success'
+    });
+    setTimeout(() => setToast(null), 3000);
+
+    try {
+      setAnalyzingMitigations(true);
+
+      const data = await analyzePostMitigation(attack_paths, mitigationSelections);
+
+      if (data.status === 'ok') {
+        setToast({
+          message: `Analysis complete! Applied ${mitigationSelections.length} mitigations. Risk reduced by ${data.residual_risk.risk_reduction_percentage.toFixed(1)}%`,
+          type: 'success'
+        });
+        setTimeout(() => setToast(null), 5000);
+
+        // TODO: Handle post-mitigation results display
+        console.log('Post-mitigation analysis:', data);
+      } else {
+        setToast({
+          message: 'Failed to analyze mitigations',
+          type: 'error'
+        });
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err) {
+      console.error('Failed to analyze all mitigations:', err);
+      setToast({
+        message: 'Failed to analyze mitigations',
+        type: 'error'
+      });
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setAnalyzingMitigations(false);
+    }
   };
 
   // Select all mitigations for a specific attack path
@@ -855,6 +951,8 @@ const StigmergicResultsView = ({ results }) => {
             title="Comprehensive Mitigation Summary - All Attack Paths"
             selectedMitigations={selectedMitigations}
             clearAllMitigations={clearAllMitigations}
+            applyAllMitigations={applyAllMitigations}
+            analyzingMitigations={analyzingMitigations}
           />
         </div>
       )}
