@@ -847,23 +847,9 @@ const StigmergicResultsView = ({ results }) => {
           <MitigationSummary
             paths={results.csa_risk_assessment?.scored_paths || attack_paths}
             title="Comprehensive Mitigation Summary - All Attack Paths"
+            selectedMitigations={selectedMitigations}
+            clearAllMitigations={clearAllMitigations}
           />
-        </div>
-      )}
-
-      {/* Mitigation Action Bar */}
-      {attack_paths.length > 0 && (
-        <div className="mitigation-action-bar">
-          <div className="mitigation-action-info">
-            <span className="mitigation-count">
-              {Object.values(selectedMitigations).filter(Boolean).length} mitigation(s) selected
-            </span>
-          </div>
-          <div className="mitigation-action-buttons">
-            <button className="btn btn-secondary" onClick={clearAllMitigations}>
-              Clear Selections
-            </button>
-          </div>
         </div>
       )}
 

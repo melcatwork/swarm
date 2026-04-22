@@ -1271,38 +1271,21 @@ function ThreatModelPage() {
                 </>
               )
             })()}
-
-
-            {/* Apply Mitigations Action Bar */}
-            <div className="mitigation-action-bar">
-              <div className="mitigation-action-info">
-                <span className="mitigation-count">
-                  {Object.values(selectedMitigations).filter(Boolean).length} mitigation(s) selected
-                </span>
-              </div>
-              <div className="mitigation-action-buttons">
-                <button
-                  className="btn btn-secondary"
-                  onClick={clearAllMitigations}
-                  disabled={Object.values(selectedMitigations).filter(Boolean).length === 0}
-                >
-                  Clear Selections
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={applyMitigations}
-                  disabled={analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0}
-                >
-                  {analyzingMitigations ? 'Analyzing...' : 'Apply Mitigations & Analyze'}
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Comprehensive Mitigation Summary */}
           {(() => {
             const paths = result.csa_risk_assessment?.scored_paths || result.final_paths || []
-            return <MitigationSummary paths={paths} title="Comprehensive Mitigation Summary - All Attack Paths" />
+            return (
+              <MitigationSummary
+                paths={paths}
+                title="Comprehensive Mitigation Summary - All Attack Paths"
+                selectedMitigations={selectedMitigations}
+                clearAllMitigations={clearAllMitigations}
+                applyMitigations={applyMitigations}
+                analyzingMitigations={analyzingMitigations}
+              />
+            )
           })()}
         </div>
       )}

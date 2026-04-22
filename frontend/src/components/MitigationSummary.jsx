@@ -17,7 +17,14 @@ const DEFENSE_LAYER_COLOURS = {
   recovery: { bg: '#fef3c7', border: '#92400e', text: '#92400e', label: 'Recovery', icon: '♻️' },
 }
 
-export default function MitigationSummary({ paths, title = "Comprehensive Mitigation Summary" }) {
+export default function MitigationSummary({
+  paths,
+  title = "Comprehensive Mitigation Summary",
+  selectedMitigations = {},
+  clearAllMitigations = null,
+  applyMitigations = null,
+  analyzingMitigations = false,
+}) {
   const [expandedPaths, setExpandedPaths] = useState(new Set([0])) // First path expanded by default
   const [expandedLayers, setExpandedLayers] = useState({})
 
@@ -77,16 +84,25 @@ export default function MitigationSummary({ paths, title = "Comprehensive Mitiga
   })
 
   return (
-    <div className="mitigation-summary-panel">
-      <div className="mitigation-summary-header">
-        <div className="summary-title-row">
-          <Shield size={24} />
-          <h3>{title}</h3>
+    <div
+      style={{
+        borderRadius: 8,
+        border: '1px solid var(--color-border-secondary)',
+        backgroundColor: 'var(--color-background-secondary)',
+        padding: 16,
+        marginBottom: 20,
+      }}
+    >
+      <div className="mitigation-summary-panel">
+        <div className="mitigation-summary-header">
+          <div className="summary-title-row">
+            <Shield size={24} />
+            <h3>{title}</h3>
+          </div>
+          <p className="summary-subtitle">
+            Defense-in-depth mitigations organized by attack path and security layer
+          </p>
         </div>
-        <p className="summary-subtitle">
-          Defense-in-depth mitigations organized by attack path and security layer
-        </p>
-      </div>
 
       {/* Global Stats Bar */}
       <div className="global-mitigation-stats">
@@ -307,10 +323,99 @@ export default function MitigationSummary({ paths, title = "Comprehensive Mitiga
               {agentExplorationPaths.length > 0 && (
                 <AgentMitigationsSection paths={agentExplorationPaths} renderPathCard={renderPathCard} />
               )}
+
+              {/* Apply Mitigations Action Bar */}
+              {clearAllMitigations && (
+                <div
+                  style={{
+                    backgroundColor: 'var(--color-primary)',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    padding: '16px 20px',
+                    borderRadius: 8,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: 24,
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span
+                      style={{
+                        color: '#fff',
+                        fontSize: 15,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {Object.values(selectedMitigations).filter(Boolean).length} mitigation(s) selected
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <button
+                      onClick={clearAllMitigations}
+                      disabled={Object.values(selectedMitigations).filter(Boolean).length === 0}
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: 6,
+                        border: '1px solid rgba(255, 255, 255, 0.3)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                        color: '#fff',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: Object.values(selectedMitigations).filter(Boolean).length === 0 ? 'not-allowed' : 'pointer',
+                        opacity: Object.values(selectedMitigations).filter(Boolean).length === 0 ? 0.5 : 1,
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (Object.values(selectedMitigations).filter(Boolean).length > 0) {
+                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.25)'
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'
+                      }}
+                    >
+                      Clear Selections
+                    </button>
+                    {applyMitigations && (
+                      <button
+                        onClick={applyMitigations}
+                        disabled={analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0}
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: 6,
+                          border: 'none',
+                          backgroundColor: '#fff',
+                          color: '#667eea',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          cursor: (analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0) ? 'not-allowed' : 'pointer',
+                          opacity: (analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0) ? 0.5 : 1,
+                          transition: 'all 0.2s',
+                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!analyzingMitigations && Object.values(selectedMitigations).filter(Boolean).length > 0) {
+                            e.currentTarget.style.transform = 'translateY(-1px)'
+                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)'
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
+                        }}
+                      >
+                        {analyzingMitigations ? 'Analyzing...' : 'Apply Mitigations & Analyze'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )
         })()}
       </div>
+    </div>
     </div>
   )
 }
