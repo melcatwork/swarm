@@ -6,6 +6,7 @@ import StigmergicResultsView from '../components/StigmergicResultsView';
 import ImpactSelector from '../components/ImpactSelector';
 import CsaRiskSummary from '../components/CsaRiskSummary';
 import CsaPathCard from '../components/CsaPathCard';
+import MitigationSummary from '../components/MitigationSummary';
 import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, uploadAndRunStigmergic, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels, checkHealth, cancelRun } from '../api/client';
 import { formatGMT8DateShort, formatGMT8Time } from '../utils/formatters';
 import './ThreatModelPage.css';
@@ -1213,6 +1214,12 @@ function ThreatModelPage() {
               csaRiskAssessment={result.csa_risk_assessment}
             />
           )}
+
+          {/* Comprehensive Mitigation Summary */}
+          {(() => {
+            const paths = result.csa_risk_assessment?.scored_paths || result.final_paths || []
+            return <MitigationSummary paths={paths} title="Comprehensive Mitigation Summary - All Attack Paths" />
+          })()}
 
           {/* Attack Path Cards */}
           <div className="attack-paths-list">

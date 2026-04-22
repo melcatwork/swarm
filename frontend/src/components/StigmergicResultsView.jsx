@@ -13,6 +13,7 @@ import { ChevronDown, ChevronUp, Network, CheckCircle, TrendingUp, AlertCircle, 
 import SharedAttackGraph from './SharedAttackGraph';
 import CsaRiskSummary from './CsaRiskSummary';
 import CsaPathCard from './CsaPathCard';
+import MitigationSummary from './MitigationSummary';
 import './StigmergicResultsView.css';
 
 const StigmergicResultsView = ({ results }) => {
@@ -795,6 +796,16 @@ const StigmergicResultsView = ({ results }) => {
         <div className="stigmergic-section">
           <CsaRiskSummary
             csaRiskAssessment={results.csa_risk_assessment}
+          />
+        </div>
+      )}
+
+      {/* Comprehensive Mitigation Summary */}
+      {attack_paths.length > 0 && (
+        <div className="stigmergic-section">
+          <MitigationSummary
+            paths={results.csa_risk_assessment?.scored_paths || attack_paths}
+            title="Comprehensive Mitigation Summary - All Attack Paths"
           />
         </div>
       )}
