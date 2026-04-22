@@ -648,6 +648,9 @@ def analyze_post_mitigation_impact(
             f"({risk_reduction:.1f}% reduction)"
         )
 
+    # Calculate mean residual risk score (for backward compatibility in API response)
+    residual_mean_score = sum(residual_scores) / len(residual_scores) if residual_scores else 0.0
+
     # Top residual risks (top 3 still viable or partially mitigated paths)
     viable_paths = [
         p for p in post_mitigation_paths
