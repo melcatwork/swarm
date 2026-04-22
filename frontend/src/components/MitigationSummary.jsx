@@ -23,6 +23,7 @@ export default function MitigationSummary({
   selectedMitigations = {},
   clearAllMitigations = null,
   applyMitigations = null,
+  applyAllMitigations = null,
   analyzingMitigations = false,
 }) {
   const [expandedPaths, setExpandedPaths] = useState(new Set([0])) // First path expanded by default
@@ -377,6 +378,40 @@ export default function MitigationSummary({
                     >
                       Clear Selections
                     </button>
+                    {applyAllMitigations && (
+                      <button
+                        onClick={applyAllMitigations}
+                        disabled={analyzingMitigations}
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: 6,
+                          border: 'none',
+                          backgroundColor: '#10b981',
+                          color: '#fff',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          cursor: analyzingMitigations ? 'not-allowed' : 'pointer',
+                          opacity: analyzingMitigations ? 0.5 : 1,
+                          transition: 'all 0.2s',
+                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!analyzingMitigations) {
+                            e.currentTarget.style.backgroundColor = '#059669'
+                            e.currentTarget.style.transform = 'translateY(-1px)'
+                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#10b981'
+                          e.currentTarget.style.transform = 'translateY(0)'
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
+                        }}
+                        title="Automatically select and apply all mitigations from all attack paths"
+                      >
+                        {analyzingMitigations ? 'Analyzing...' : 'Apply All Mitigations & Analyze'}
+                      </button>
+                    )}
                     {applyMitigations && (
                       <button
                         onClick={applyMitigations}

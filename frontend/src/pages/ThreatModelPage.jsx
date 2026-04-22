@@ -608,6 +608,99 @@ function ThreatModelPage() {
     }
   };
 
+  // Apply ALL mitigations and run post-mitigation analysis
+  const applyAllMitigations = async () => {
+    if (!result || !result.final_paths) {
+      setToast({
+        message: 'No attack paths to analyze',
+        type: 'error'
+      });
+      return;
+    }
+
+    // Get all paths
+    const paths = result.csa_risk_assessment?.scored_paths || result.final_paths || [];
+
+    // Build selectedMitigations object with ALL mitigations selected
+    const allMitigations = {};
+    const mitigationSelections = [];
+
+    paths.forEach(path => {
+      const pathId = path.path_id || path.id || path.name;
+      const steps = path.steps || [];
+
+      steps.forEach((step, stepIndex) => {
+        const stepNumber = step.step_number || stepIndex + 1;
+        const mitigationsByLayer = step.mitigations_by_layer || {};
+
+        Object.values(mitigationsByLayer).forEach(layerMitigations => {
+          if (Array.isArray(layerMitigations)) {
+            layerMitigations.forEach(mitigation => {
+              const mitigationName = mitigation.mitigation_name;
+              const key = `${pathId}:${stepNumber}:${mitigationName}`;
+
+              allMitigations[key] = true;
+              mitigationSelections.push({
+                path_id: pathId,
+                step_number: stepNumber,
+                mitigation_id: mitigationName,
+                selected: true
+              });
+            });
+          }
+        });
+      });
+    });
+
+    // Update UI with all selections
+    setSelectedMitigations(allMitigations);
+
+    if (mitigationSelections.length === 0) {
+      setToast({
+        message: 'No mitigations found to apply',
+        type: 'warning'
+      });
+      return;
+    }
+
+    // Show count to user
+    setToast({
+      message: `Applying all ${mitigationSelections.length} mitigations...`,
+      type: 'success'
+    });
+
+    try {
+      setAnalyzingMitigations(true);
+      setError(null);
+
+      const data = await analyzePostMitigation(result.final_paths, mitigationSelections);
+
+      if (data.status === 'ok') {
+        setPostMitigationAnalysis(data);
+        setViewMode('comparison');
+        setToast({
+          message: `Analysis complete! Applied ${mitigationSelections.length} mitigations. Risk reduced by ${data.residual_risk.risk_reduction_percentage.toFixed(1)}%`,
+          type: 'success'
+        });
+      } else {
+        setError(data.error || 'Failed to analyze mitigations');
+        setToast({
+          message: 'Failed to analyze mitigations',
+          type: 'error'
+        });
+      }
+    } catch (err) {
+      console.error('Failed to analyze all mitigations:', err);
+      setError(err.message || 'Failed to analyze mitigations');
+      setToast({
+        message: 'Failed to analyze mitigations',
+        type: 'error'
+      });
+    } finally {
+      setAnalyzingMitigations(false);
+    }
+  };
+
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -1289,6 +1382,7 @@ function ThreatModelPage() {
                 selectedMitigations={selectedMitigations}
                 clearAllMitigations={clearAllMitigations}
                 applyMitigations={applyMitigations}
+                applyAllMitigations={applyAllMitigations}
                 analyzingMitigations={analyzingMitigations}
               />
             )
