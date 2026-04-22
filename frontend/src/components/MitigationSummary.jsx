@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { Shield, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
+import { Shield, ChevronDown, ChevronUp, AlertTriangle, Network } from 'lucide-react'
 import './MitigationSummary.css'
 
 const DEFENSE_LAYER_COLOURS = {
@@ -108,7 +108,12 @@ export default function MitigationSummary({ paths, title = "Comprehensive Mitiga
 
       {/* Attack Paths List */}
       <div className="mitigation-paths-list">
-        {paths.map((path, pathIndex) => {
+        {(() => {
+          // Separate paths by source
+          const confirmedVulnPaths = paths.filter(p => p.source === 'confirmed_vuln_synthesis')
+          const agentExplorationPaths = paths.filter(p => p.source !== 'confirmed_vuln_synthesis')
+
+          const renderPathCard = (path, pathIndex) => {
           const isExpanded = expandedPaths.has(pathIndex)
           const pathName = path.name || path.path_name || `Attack Path ${pathIndex + 1}`
           const steps = path.steps || []
@@ -279,8 +284,94 @@ export default function MitigationSummary({ paths, title = "Comprehensive Mitiga
               )}
             </div>
           )
-        })}
+          }
+
+          return (
+            <>
+              {/* Confirmed Vulnerability-Grounded Paths */}
+              {confirmedVulnPaths.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <h4 style={{
+                    fontSize: 16,
+                    fontWeight: 600,
+                    marginBottom: 12,
+                    color: 'var(--color-text-primary)'
+                  }}>
+                    Confirmed Vulnerability-Grounded Paths ({confirmedVulnPaths.length})
+                  </h4>
+                  {confirmedVulnPaths.map((path, i) => renderPathCard(path, i))}
+                </div>
+              )}
+
+              {/* Agent Explorations - Collapsed by Default */}
+              {agentExplorationPaths.length > 0 && (
+                <AgentMitigationsSection paths={agentExplorationPaths} renderPathCard={renderPathCard} />
+              )}
+            </>
+          )
+        })()}
       </div>
+    </div>
+  )
+}
+
+// Agent Explorations Collapsible Section for Mitigations
+function AgentMitigationsSection({ paths, renderPathCard }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div style={{
+      border: '1px solid var(--color-border-secondary)',
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginBottom: 12
+    }}>
+      {/* Header - Clickable to Expand/Collapse */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          width: '100%',
+          padding: '12px 16px',
+          backgroundColor: 'var(--color-background-secondary)',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: 14,
+          fontWeight: 600,
+          color: 'var(--color-text-primary)',
+          transition: 'background-color 0.2s'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--color-background-tertiary)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--color-background-secondary)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Network size={16} style={{ color: 'var(--color-text-secondary)' }} />
+          <span>Agent Explorations - {paths.length} path{paths.length !== 1 ? 's' : ''}</span>
+        </div>
+        {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+      </button>
+
+      {/* Collapsed Content - Paths */}
+      {expanded && (
+        <div style={{ padding: '12px 16px' }}>
+          <p style={{
+            fontSize: 12,
+            color: 'var(--color-text-secondary)',
+            marginBottom: 12,
+            lineHeight: 1.5
+          }}>
+            These mitigations correspond to attack paths discovered by threat actor persona agents
+            during exploration. They represent defensive measures for creative attack scenarios.
+          </p>
+          {paths.map((path, i) => renderPathCard(path, i))}
+        </div>
+      )}
     </div>
   )
 }
