@@ -427,9 +427,17 @@ export default function CsaPathCard({
   const riskScenario = path.risk_scenario || csaScore.risk_scenario || {}
   const riskRegister = path.risk_register_entry || csaScore.risk_register_entry || {}
 
+  // Original risk
   const band = csaScore.risk_band || 'Medium'
   const riskLevel = csaScore.risk_level
   const bandColour = BAND_COLOURS[band] || '#888'
+
+  // Residual risk (post-mitigation)
+  const residualScore = path.residual_csa_risk_score || null
+  const residualBand = residualScore?.risk_band
+  const residualRiskLevel = residualScore?.risk_level
+  const residualBandColour = residualBand ? BAND_COLOURS[residualBand] || '#888' : null
+  const hasResidualRisk = residualScore !== null
 
   const steps = path.steps || []
   const cia = csaScore.cia_classification || []
@@ -484,7 +492,19 @@ export default function CsaPathCard({
               flexWrap: 'wrap',
             }}
           >
-            {/* Band + score */}
+            {/* Original Band + score */}
+            {hasResidualRisk && (
+              <span
+                style={{
+                  fontSize: 10,
+                  color: 'var(--color-text-tertiary)',
+                  textDecoration: 'line-through',
+                  marginRight: -4,
+                }}
+              >
+                Original:
+              </span>
+            )}
             <span
               style={{
                 backgroundColor: bandColour,
@@ -493,6 +513,8 @@ export default function CsaPathCard({
                 borderRadius: 4,
                 fontWeight: 700,
                 fontSize: 12,
+                opacity: hasResidualRisk ? 0.6 : 1,
+                textDecoration: hasResidualRisk ? 'line-through' : 'none',
               }}
             >
               {band}
@@ -503,10 +525,60 @@ export default function CsaPathCard({
                   fontWeight: 700,
                   color: bandColour,
                   fontSize: 13,
+                  opacity: hasResidualRisk ? 0.6 : 1,
+                  textDecoration: hasResidualRisk ? 'line-through' : 'none',
                 }}
               >
                 {riskLevel} / 25
               </span>
+            )}
+
+            {/* Residual Band + score (if available) */}
+            {hasResidualRisk && (
+              <>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: '#10b981',
+                    fontWeight: 700,
+                  }}
+                >
+                  →
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: '#10b981',
+                    fontWeight: 600,
+                  }}
+                >
+                  Residual:
+                </span>
+                <span
+                  style={{
+                    backgroundColor: residualBandColour,
+                    color: '#fff',
+                    padding: '3px 10px',
+                    borderRadius: 4,
+                    fontWeight: 700,
+                    fontSize: 12,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  {residualBand}
+                </span>
+                {residualRiskLevel !== undefined && (
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: residualBandColour,
+                      fontSize: 13,
+                    }}
+                  >
+                    {residualRiskLevel} / 25
+                  </span>
+                )}
+              </>
             )}
 
             {/* Divider */}

@@ -5,6 +5,7 @@ import Toast from '../components/Toast';
 import StigmergicResultsView from '../components/StigmergicResultsView';
 import ImpactSelector from '../components/ImpactSelector';
 import CsaRiskSummary from '../components/CsaRiskSummary';
+import ResidualRiskSummary from '../components/ResidualRiskSummary';
 import CsaPathCard from '../components/CsaPathCard';
 import MitigationSummary from '../components/MitigationSummary';
 import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, uploadAndRunStigmergic, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels, checkHealth, cancelRun } from '../api/client';
@@ -545,6 +546,50 @@ function ThreatModelPage() {
     setViewMode('pre');
   };
 
+  // Helper: Convert residual_risk_score (0-10) to risk_level (0-25) and risk_band
+  const convertResidualScoreToCSA = (residualScore, originalImpactScore = 5) => {
+    // residualScore is 0-10 scale (similar to likelihood * impact / 5)
+    // Convert back to 5x5 matrix format
+    // Assume likelihood reduced proportionally, impact stays same (data classification)
+    const residualLikelihood = Math.ceil((residualScore * 5) / originalImpactScore)
+    const residualRiskLevel = Math.min(Math.max(residualLikelihood * originalImpactScore, 0), 25)
+
+    // Map risk_level to risk_band (CSA CII 5x5 matrix)
+    let riskBand
+    if (residualRiskLevel >= 20) riskBand = 'Very High'
+    else if (residualRiskLevel >= 15) riskBand = 'High'
+    else if (residualRiskLevel >= 10) riskBand = 'Medium-High'
+    else if (residualRiskLevel >= 5) riskBand = 'Medium'
+    else riskBand = 'Low'
+
+    return { residualRiskLevel, riskBand, residualLikelihood }
+  }
+
+  // Helper: Calculate residual risk distribution from post-mitigation paths
+  const calculateResidualRiskDistribution = (postMitigationPaths, originalImpactScore = 5) => {
+    const distribution = {
+      'Very High': 0,
+      'High': 0,
+      'Medium-High': 0,
+      'Medium': 0,
+      'Low': 0,
+    }
+
+    let highestBand = 'Low'
+    const bandPriority = { 'Very High': 5, 'High': 4, 'Medium-High': 3, 'Medium': 2, 'Low': 1 }
+
+    postMitigationPaths.forEach(path => {
+      const { riskBand } = convertResidualScoreToCSA(path.residual_risk_score, originalImpactScore)
+      distribution[riskBand] += 1
+
+      if (bandPriority[riskBand] > bandPriority[highestBand]) {
+        highestBand = riskBand
+      }
+    })
+
+    return { distribution, highestBand }
+  }
+
   // Apply selected mitigations and run post-mitigation analysis
   const applyMitigations = async () => {
     if (!result || !result.final_paths) {
@@ -583,8 +628,56 @@ function ThreatModelPage() {
       const data = await analyzePostMitigation(result.final_paths, mitigationSelections);
 
       if (data.status === 'ok') {
-        setPostMitigationAnalysis(data);
-        setViewMode('comparison');
+        // Get original impact score from CSA risk assessment
+        const originalImpactScore = result.csa_risk_assessment?.impact_configuration?.user_set_score || 5
+
+        // Enrich post-mitigation paths with CSA-style risk bands
+        const enrichedPaths = data.post_mitigation_paths.map(pmPath => {
+          const { residualRiskLevel, riskBand, residualLikelihood } = convertResidualScoreToCSA(
+            pmPath.residual_risk_score,
+            originalImpactScore
+          )
+
+          // Find original path to merge data
+          const originalPath = (result.csa_risk_assessment?.scored_paths || result.final_paths || [])
+            .find(p => (p.path_id || p.id || p.name) === pmPath.path_id)
+
+          return {
+            ...originalPath,
+            ...pmPath,
+            residual_csa_risk_score: {
+              risk_level: residualRiskLevel,
+              risk_band: riskBand,
+              likelihood: {
+                score: residualLikelihood,
+                label: residualLikelihood >= 5 ? 'Very Likely' : residualLikelihood >= 4 ? 'Likely' : residualLikelihood >= 3 ? 'Possible' : residualLikelihood >= 2 ? 'Unlikely' : 'Very Unlikely'
+              },
+              impact: originalPath?.csa_risk_score?.impact || { score: originalImpactScore }
+            }
+          }
+        })
+
+        // Calculate residual risk distribution
+        const { distribution, highestBand } = calculateResidualRiskDistribution(
+          data.post_mitigation_paths,
+          originalImpactScore
+        )
+
+        // Create enriched analysis object
+        const enrichedAnalysis = {
+          ...data,
+          post_mitigation_paths: enrichedPaths,
+          residual_risk_assessment: {
+            risk_distribution: distribution,
+            highest_band: highestBand,
+            paths_scored: enrichedPaths.length,
+            risk_reduction_percentage: data.residual_risk.risk_reduction_percentage,
+            framework: 'CSA Cloud Controls Matrix (CCM) v4 & CII Risk Assessment Guide Feb 2021'
+          }
+        }
+
+        setPostMitigationAnalysis(enrichedAnalysis);
+        setViewMode('post');
         setToast({
           message: `Analysis complete! Risk reduced by ${data.residual_risk.risk_reduction_percentage.toFixed(1)}%`,
           type: 'success'
@@ -676,8 +769,56 @@ function ThreatModelPage() {
       const data = await analyzePostMitigation(result.final_paths, mitigationSelections);
 
       if (data.status === 'ok') {
-        setPostMitigationAnalysis(data);
-        setViewMode('comparison');
+        // Get original impact score from CSA risk assessment
+        const originalImpactScore = result.csa_risk_assessment?.impact_configuration?.user_set_score || 5
+
+        // Enrich post-mitigation paths with CSA-style risk bands
+        const enrichedPaths = data.post_mitigation_paths.map(pmPath => {
+          const { residualRiskLevel, riskBand, residualLikelihood } = convertResidualScoreToCSA(
+            pmPath.residual_risk_score,
+            originalImpactScore
+          )
+
+          // Find original path to merge data
+          const originalPath = (result.csa_risk_assessment?.scored_paths || result.final_paths || [])
+            .find(p => (p.path_id || p.id || p.name) === pmPath.path_id)
+
+          return {
+            ...originalPath,
+            ...pmPath,
+            residual_csa_risk_score: {
+              risk_level: residualRiskLevel,
+              risk_band: riskBand,
+              likelihood: {
+                score: residualLikelihood,
+                label: residualLikelihood >= 5 ? 'Very Likely' : residualLikelihood >= 4 ? 'Likely' : residualLikelihood >= 3 ? 'Possible' : residualLikelihood >= 2 ? 'Unlikely' : 'Very Unlikely'
+              },
+              impact: originalPath?.csa_risk_score?.impact || { score: originalImpactScore }
+            }
+          }
+        })
+
+        // Calculate residual risk distribution
+        const { distribution, highestBand } = calculateResidualRiskDistribution(
+          data.post_mitigation_paths,
+          originalImpactScore
+        )
+
+        // Create enriched analysis object
+        const enrichedAnalysis = {
+          ...data,
+          post_mitigation_paths: enrichedPaths,
+          residual_risk_assessment: {
+            risk_distribution: distribution,
+            highest_band: highestBand,
+            paths_scored: enrichedPaths.length,
+            risk_reduction_percentage: data.residual_risk.risk_reduction_percentage,
+            framework: 'CSA Cloud Controls Matrix (CCM) v4 & CII Risk Assessment Guide Feb 2021'
+          }
+        }
+
+        setPostMitigationAnalysis(enrichedAnalysis);
+        setViewMode('post');
         setToast({
           message: `Analysis complete! Applied ${mitigationSelections.length} mitigations. Risk reduced by ${data.residual_risk.risk_reduction_percentage.toFixed(1)}%`,
           type: 'success'
@@ -1392,231 +1533,83 @@ function ThreatModelPage() {
 
       {/* Post-Mitigation Analysis Section */}
       {postMitigationAnalysis && (
-        <div className="results-container post-mitigation-container">
+        <div className="results-container">
           <div className="results-header">
             <div>
-              <h2>Post-Mitigation Analysis</h2>
-              <p>Impact of selected mitigations on attack paths</p>
-            </div>
-            <div className="view-mode-toggle">
-              <button
-                className={`btn btn-sm ${viewMode === 'pre' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setViewMode('pre')}
-              >
-                Pre-Mitigation
-              </button>
-              <button
-                className={`btn btn-sm ${viewMode === 'comparison' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setViewMode('comparison')}
-              >
-                Comparison View
-              </button>
+              <h2>Post-Mitigation Risk Assessment</h2>
+              <p>Residual risk levels after applying selected mitigations</p>
             </div>
           </div>
 
-          {/* Residual Risk Summary */}
-          <div className="residual-risk-summary">
-            <h3>
-              <TrendingDown size={20} />
-              Residual Risk Assessment
-            </h3>
-            <div className="risk-stats-grid">
-              <div className="risk-stat-card neutralized">
-                <div className="risk-stat-value">{postMitigationAnalysis.residual_risk.paths_neutralized}</div>
-                <div className="risk-stat-label">Paths Neutralized</div>
-              </div>
-              <div className="risk-stat-card reduced">
-                <div className="risk-stat-value">{postMitigationAnalysis.residual_risk.paths_significantly_reduced}</div>
-                <div className="risk-stat-label">Significantly Reduced</div>
-              </div>
-              <div className="risk-stat-card partial">
-                <div className="risk-stat-value">{postMitigationAnalysis.residual_risk.paths_partially_mitigated}</div>
-                <div className="risk-stat-label">Partially Mitigated</div>
-              </div>
-              <div className="risk-stat-card viable">
-                <div className="risk-stat-value">{postMitigationAnalysis.residual_risk.paths_still_viable}</div>
-                <div className="risk-stat-label">Still Viable</div>
-              </div>
-            </div>
-
-            <div className="risk-reduction-banner">
-              <div className="risk-reduction-value">
-                {postMitigationAnalysis.residual_risk.risk_reduction_percentage.toFixed(1)}%
-              </div>
-              <div className="risk-reduction-label">Overall Risk Reduction</div>
-            </div>
-
-            <div className="risk-scores">
-              <div className="risk-score-item">
-                <span className="label">Original Mean Risk:</span>
-                <span className="value">
-                  {(postMitigationAnalysis.residual_risk.mean_residual_risk_score /
-                    (1 - postMitigationAnalysis.residual_risk.risk_reduction_percentage / 100)).toFixed(2)}/10
-                </span>
-              </div>
-              <div className="risk-score-item">
-                <span className="label">Residual Mean Risk:</span>
-                <span className="value">{postMitigationAnalysis.residual_risk.mean_residual_risk_score.toFixed(2)}/10</span>
-              </div>
-              <div className="risk-score-item">
-                <span className="label">Highest Residual Risk:</span>
-                <span className="value">{postMitigationAnalysis.residual_risk.highest_residual_risk_score.toFixed(2)}/10</span>
-              </div>
-            </div>
-
-            {/* Top Residual Risks */}
-            {postMitigationAnalysis.residual_risk.top_residual_risks.length > 0 && (
-              <div className="top-residual-risks">
-                <h4><AlertTriangle size={18} /> Top Residual Risks</h4>
-                <div className="residual-risk-list">
-                  {postMitigationAnalysis.residual_risk.top_residual_risks.map((risk, idx) => (
-                    <div key={idx} className="residual-risk-item">
-                      <div className="residual-risk-rank">#{idx + 1}</div>
-                      <div className="residual-risk-details">
-                        <div className="residual-risk-name">{risk.path_name}</div>
-                        <div className="residual-risk-meta">
-                          <span className={`risk-status-badge ${risk.path_status}`}>
-                            {risk.path_status.replace(/_/g, ' ')}
-                          </span>
-                          <span>{risk.steps_remaining} active step(s)</span>
-                          <span className="residual-risk-score">{risk.residual_risk_score.toFixed(1)}/10</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recommendations */}
-            <div className="recommendations-section">
-              <h4><Shield size={18} /> Recommendations</h4>
-              <ul className="recommendations-list">
-                {postMitigationAnalysis.residual_risk.recommendations.map((rec, idx) => (
-                  <li key={idx}>{rec}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Side-by-Side Comparison View */}
-          {viewMode === 'comparison' && (
-            <div className="comparison-view">
-              <h3>Attack Path Comparison</h3>
-              {result.final_paths.map((prePath, pathIdx) => {
-                const postPath = postMitigationAnalysis.post_mitigation_paths.find(
-                  p => p.path_id === prePath.id
-                );
-                if (!postPath) return null;
-
-                return (
-                  <div key={pathIdx} className="comparison-card">
-                    <div className="comparison-header">
-                      <h4>{prePath.name}</h4>
-                      <div className="comparison-status">
-                        <span className={`status-badge ${postPath.path_status}`}>
-                          {postPath.path_status.replace(/_/g, ' ').toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="comparison-body">
-                      {/* Pre-Mitigation Column */}
-                      <div className="comparison-column pre-mitigation">
-                        <div className="column-header">
-                          <h5>Pre-Mitigation</h5>
-                          <span className="difficulty-badge">{prePath.difficulty}</span>
-                        </div>
-                        <div className="steps-list">
-                          {prePath.steps.map((step, stepIdx) => {
-                            const stepImpact = postPath.step_impacts.find(
-                              si => si.step_number === step.step_number
-                            );
-                            const status = stepImpact?.post_mitigation_status || 'active';
-
-                            return (
-                              <div key={stepIdx} className={`step-comparison-item status-${status}`}>
-                                <div className="step-header">
-                                  <span className="step-badge">Step {step.step_number}</span>
-                                  <span className="technique-badge-small">{step.technique_id}</span>
-                                </div>
-                                <div className="step-name">{step.technique_name}</div>
-                                <div className="step-phase">{step.kill_chain_phase}</div>
-                                {status === 'blocked' && (
-                                  <div className="step-status-indicator blocked">
-                                    <X size={16} /> BLOCKED
-                                  </div>
-                                )}
-                                {status === 'reduced' && (
-                                  <div className="step-status-indicator reduced">
-                                    <AlertTriangle size={16} /> REDUCED
-                                  </div>
-                                )}
-                                {status === 'active' && (
-                                  <div className="step-status-indicator active">
-                                    <CheckCircle size={16} /> ACTIVE
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="score-display">
-                          Risk Score: <strong>{prePath.composite_score?.toFixed(1) || 'N/A'}/10</strong>
-                        </div>
-                      </div>
-
-                      {/* Post-Mitigation Column */}
-                      <div className="comparison-column post-mitigation">
-                        <div className="column-header">
-                          <h5>Post-Mitigation</h5>
-                          <span className={`difficulty-badge ${postPath.path_status}`}>
-                            {postPath.post_mitigation_difficulty}
-                          </span>
-                        </div>
-                        <div className="impact-summary">
-                          <div className="impact-stat">
-                            <X className="icon blocked" size={16} />
-                            <span>{postPath.steps_blocked} blocked</span>
-                          </div>
-                          <div className="impact-stat">
-                            <AlertTriangle className="icon reduced" size={16} />
-                            <span>{postPath.steps_reduced} reduced</span>
-                          </div>
-                          <div className="impact-stat">
-                            <CheckCircle className="icon active" size={16} />
-                            <span>{postPath.steps_remaining} active</span>
-                          </div>
-                        </div>
-                        <div className="steps-list">
-                          {postPath.step_impacts.map((stepImpact, stepIdx) => (
-                            <div key={stepIdx} className={`step-impact-item ${stepImpact.post_mitigation_status}`}>
-                              <div className="step-impact-header">
-                                <span className="step-badge">Step {stepImpact.step_number}</span>
-                                <span className={`effectiveness-badge ${stepImpact.effectiveness}`}>
-                                  {stepImpact.effectiveness} effectiveness
-                                </span>
-                              </div>
-                              <div className="step-impact-reasoning">{stepImpact.reasoning}</div>
-                              {stepImpact.applied_mitigations.length > 0 && (
-                                <div className="applied-mitigations">
-                                  <Shield size={14} />
-                                  {stepImpact.applied_mitigations.length} mitigation(s) applied
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="score-display residual">
-                          Residual Risk: <strong>{postPath.residual_risk_score.toFixed(1)}/10</strong>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {/* Residual Risk Summary - CSA Format */}
+          {postMitigationAnalysis.residual_risk_assessment && (
+            <ResidualRiskSummary
+              residualRiskAssessment={postMitigationAnalysis.residual_risk_assessment}
+              mitigationsApplied={Object.values(selectedMitigations).filter(Boolean).length}
+            />
           )}
+
+          {/* Post-Mitigation Attack Paths with Residual Risk Levels */}
+          <div className="attack-paths-list">
+            <h3>Attack Paths with Residual Risk ({postMitigationAnalysis.post_mitigation_paths.length})</h3>
+
+            {(() => {
+              const paths = postMitigationAnalysis.post_mitigation_paths || []
+
+              // Separate paths by source
+              const confirmedVulnPaths = paths.filter(p => p.source === 'confirmed_vuln_synthesis')
+              const agentExplorationPaths = paths.filter(p => p.source !== 'confirmed_vuln_synthesis')
+
+              // Sort by residual risk level
+              const sortedConfirmed = [...confirmedVulnPaths].sort((a, b) => {
+                const scoreA = a.residual_csa_risk_score?.risk_level ?? 0
+                const scoreB = b.residual_csa_risk_score?.risk_level ?? 0
+                return scoreB - scoreA
+              })
+
+              const sortedAgent = [...agentExplorationPaths].sort((a, b) => {
+                const scoreA = a.residual_csa_risk_score?.risk_level ?? 0
+                const scoreB = b.residual_csa_risk_score?.risk_level ?? 0
+                return scoreB - scoreA
+              })
+
+              return (
+                <>
+                  {/* Confirmed Vulnerability-Grounded Paths */}
+                  {sortedConfirmed.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <h4 style={{
+                        fontSize: 16,
+                        fontWeight: 600,
+                        marginBottom: 12,
+                        color: 'var(--color-text-primary)'
+                      }}>
+                        Confirmed Vulnerability-Grounded Paths ({sortedConfirmed.length})
+                      </h4>
+                      {sortedConfirmed.map((path, i) => (
+                        <CsaPathCard
+                          key={path.path_id || path.id || `residual-confirmed-${i}`}
+                          path={path}
+                          defaultExpanded={false}
+                          selectedMitigations={selectedMitigations}
+                          toggleMitigationSelection={null}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Agent Explorations */}
+                  {sortedAgent.length > 0 && (
+                    <AgentExplorationsSection
+                      paths={sortedAgent}
+                      selectedMitigations={selectedMitigations}
+                      toggleMitigationSelection={null}
+                    />
+                  )}
+                </>
+              )
+            })()}
+          </div>
         </div>
       )}
         </div> {/* Close main-content */}
