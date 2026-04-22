@@ -94,7 +94,7 @@ function SubFactorBar({ label, score, rationale }) {
   )
 }
 
-function StepRow({ step, index }) {
+function StepRow({ step, index, pathId, selectedMitigations, toggleMitigationSelection }) {
   const formatTechniqueUrl = (techniqueId) => {
     const formatted = techniqueId.replace('.', '/')
     return `https://attack.mitre.org/techniques/${formatted}/`
@@ -103,6 +103,8 @@ function StepRow({ step, index }) {
   // Get mitigations organized by defense layer
   const mitigationsByLayer = step.mitigations_by_layer || {}
   const hasMitigations = Object.keys(mitigationsByLayer).length > 0
+
+  const stepNumber = step.step_number || index + 1
 
   return (
     <div
@@ -273,16 +275,22 @@ function StepRow({ step, index }) {
                   </div>
 
                   {/* Mitigations List */}
-                  {layerMitigations.map((mitigation, idx) => (
+                  {layerMitigations.map((mitigation, idx) => {
+                    const mitigationKey = `${pathId}:${stepNumber}:${mitigation.mitigation_name}`
+                    const isSelected = selectedMitigations?.[mitigationKey] || false
+
+                    return (
                     <div
                       key={idx}
                       style={{
                         marginBottom: 8,
                         marginLeft: 12,
                         padding: '8px 10px',
-                        backgroundColor: 'var(--color-background-secondary)',
+                        backgroundColor: isSelected ? `${layerConfig.bg}40` : 'var(--color-background-secondary)',
                         borderRadius: 4,
                         borderLeft: `3px solid ${layerConfig.border}`,
+                        border: isSelected ? `1px solid ${layerConfig.border}` : 'none',
+                        transition: 'all 0.2s',
                       }}
                     >
                       {/* Mitigation Name and Priority */}
@@ -294,15 +302,36 @@ function StepRow({ step, index }) {
                           marginBottom: 4,
                         }}
                       >
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: layerConfig.text,
-                          }}
-                        >
-                          {mitigation.mitigation_name}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flex: 1 }}>
+                          {toggleMitigationSelection && (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                toggleMitigationSelection(pathId, stepNumber, mitigation.mitigation_name)
+                              }}
+                              style={{
+                                width: 16,
+                                height: 16,
+                                marginTop: 1,
+                                cursor: 'pointer',
+                                accentColor: layerConfig.border,
+                              }}
+                              title="Select mitigation for post-mitigation analysis"
+                            />
+                          )}
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: layerConfig.text,
+                              flex: 1,
+                            }}
+                          >
+                            {mitigation.mitigation_name}
+                          </span>
+                        </div>
                         {mitigation.priority && (
                           <span
                             style={{
@@ -370,7 +399,8 @@ function StepRow({ step, index }) {
                         )}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )
             })}
@@ -381,7 +411,12 @@ function StepRow({ step, index }) {
   )
 }
 
-export default function CsaPathCard({ path, defaultExpanded = false }) {
+export default function CsaPathCard({
+  path,
+  defaultExpanded = false,
+  selectedMitigations = {},
+  toggleMitigationSelection = null,
+}) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [showSubFactors, setShowSubFactors] = useState(false)
 
@@ -399,6 +434,7 @@ export default function CsaPathCard({ path, defaultExpanded = false }) {
   const steps = path.steps || []
   const cia = csaScore.cia_classification || []
   const actorName = path.persona_id || path.threat_actor || path.source || 'Swarm'
+  const pathId = path.path_id || path.id || path.name
 
   return (
     <div
@@ -1011,7 +1047,14 @@ export default function CsaPathCard({ path, defaultExpanded = false }) {
                 Attack steps ({steps.length})
               </div>
               {steps.map((step, i) => (
-                <StepRow key={i} step={step} index={i} />
+                <StepRow
+                  key={i}
+                  step={step}
+                  index={i}
+                  pathId={pathId}
+                  selectedMitigations={selectedMitigations}
+                  toggleMitigationSelection={toggleMitigationSelection}
+                />
               ))}
             </div>
           )}

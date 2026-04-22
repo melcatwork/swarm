@@ -736,6 +736,8 @@ const StigmergicResultsView = ({ results }) => {
                           key={path.path_id || path.id || `confirmed-${i}`}
                           path={path}
                           defaultExpanded={false}
+                          selectedMitigations={selectedMitigations}
+                          toggleMitigationSelection={toggleMitigationSelection}
                         />
                       ))}
                     </div>
@@ -743,7 +745,11 @@ const StigmergicResultsView = ({ results }) => {
 
                   {/* Agent Explorations - Collapsed by Default */}
                   {sortedAgent.length > 0 && (
-                    <AgentExplorationsSection paths={sortedAgent} />
+                    <AgentExplorationsSection
+                      paths={sortedAgent}
+                      selectedMitigations={selectedMitigations}
+                      toggleMitigationSelection={toggleMitigationSelection}
+                    />
                   )}
                 </>
               )
@@ -879,7 +885,7 @@ const StigmergicResultsView = ({ results }) => {
 };
 
 // Agent Explorations Collapsible Section Component
-function AgentExplorationsSection({ paths }) {
+function AgentExplorationsSection({ paths, selectedMitigations, toggleMitigationSelection }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -937,6 +943,8 @@ function AgentExplorationsSection({ paths }) {
               key={path.path_id || path.id || `agent-${i}`}
               path={path}
               defaultExpanded={false}
+              selectedMitigations={selectedMitigations}
+              toggleMitigationSelection={toggleMitigationSelection}
             />
           ))}
         </div>
