@@ -13,6 +13,16 @@ echo -e "${BLUE}   Stopping Swarm TM Services${NC}"
 echo -e "${BLUE}=================================${NC}"
 echo ""
 
+# Check LLM provider for more accurate status
+if [ -f ".env" ]; then
+    LLM_PROVIDER=$(grep "^LLM_PROVIDER=" .env | cut -d'=' -f2 2>/dev/null)
+else
+    LLM_PROVIDER="unknown"
+fi
+
+echo -e "${YELLOW}LLM Provider:${NC} ${BLUE}$LLM_PROVIDER${NC}"
+echo ""
+
 STOPPED_ANY=false
 
 # Function to check if port is in use
@@ -76,10 +86,14 @@ if pkill -f "python.*app.main" 2>/dev/null; then
 fi
 
 # Check Ollama (don't auto-kill as it might be used by other projects)
-if pgrep -x "ollama" > /dev/null; then
-    echo -e "${YELLOW}Ollama is still running${NC}"
-    echo -e "  ${BLUE}To stop Ollama:${NC} pkill -f 'ollama serve'"
-    echo -e "  ${BLUE}Note:${NC} Ollama may be used by other projects"
+if [ "$LLM_PROVIDER" = "ollama" ]; then
+    if pgrep -x "ollama" > /dev/null; then
+        echo -e "${YELLOW}Ollama is still running${NC}"
+        echo -e "  ${BLUE}To stop Ollama:${NC} pkill -f 'ollama serve'"
+        echo -e "  ${BLUE}Note:${NC} Ollama may be used by other projects"
+    fi
+elif [ "$LLM_PROVIDER" = "bedrock" ] || [ "$LLM_PROVIDER" = "anthropic" ]; then
+    echo -e "${BLUE}No local LLM server to stop (using $LLM_PROVIDER)${NC}"
 fi
 
 # Clean up PID file
@@ -107,10 +121,14 @@ else
     echo -e "  Backend:   ${GREEN}✓ Stopped${NC}"
 fi
 
-if check_port 11434; then
-    echo -e "  Ollama:    ${BLUE}Running (not stopped, may be used by other projects)${NC}"
+if [ "$LLM_PROVIDER" = "ollama" ]; then
+    if check_port 11434; then
+        echo -e "  Ollama:    ${BLUE}Running (not stopped, may be used by other projects)${NC}"
+    else
+        echo -e "  Ollama:    ${GREEN}✓ Stopped${NC}"
+    fi
 else
-    echo -e "  Ollama:    ${GREEN}✓ Stopped${NC}"
+    echo -e "  LLM:       ${BLUE}Using $LLM_PROVIDER (no local server)${NC}"
 fi
 
 echo ""
@@ -118,6 +136,7 @@ if [ "$STOPPED_ANY" = true ]; then
     if [ "$STILL_RUNNING" = true ]; then
         echo -e "${YELLOW}⚠ Some services are still running${NC}"
         echo -e "  Run ${BLUE}lsof -i :5173${NC} or ${BLUE}lsof -i :8000${NC} to identify processes"
+        echo -e "  Force kill: ${BLUE}pkill -9 -f 'vite'${NC} or ${BLUE}pkill -9 -f 'uvicorn'${NC}"
     else
         echo -e "${GREEN}✓ All services stopped successfully${NC}"
     fi
@@ -127,5 +146,12 @@ fi
 
 echo ""
 echo -e "${YELLOW}To restart:${NC}"
-echo -e "  ./start-all.sh        ${BLUE}# Standard mode${NC}"
-echo -e "  ./start-all-tmux.sh   ${BLUE}# Tmux mode (recommended)${NC}"
+echo -e "  ./start-all.sh        ${BLUE}# Standard mode (logs in terminal)${NC}"
+echo -e "  ./start-all-tmux.sh   ${BLUE}# Tmux mode (split panes, recommended)${NC}"
+echo ""
+echo -e "${YELLOW}Quick Status Check:${NC}"
+echo -e "  lsof -i :5173         ${BLUE}# Check frontend${NC}"
+echo -e "  lsof -i :8000         ${BLUE}# Check backend${NC}"
+if [ "$LLM_PROVIDER" = "ollama" ]; then
+    echo -e "  lsof -i :11434        ${BLUE}# Check Ollama${NC}"
+fi

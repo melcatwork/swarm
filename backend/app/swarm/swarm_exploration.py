@@ -15,6 +15,7 @@ Key Features:
 import json
 import logging
 import random
+import re
 from typing import List, Dict, Any, Optional, Callable
 from uuid import uuid4
 
@@ -24,6 +25,7 @@ from .shared_graph import SharedAttackGraph, AttackNode
 from .crews import get_llm, parse_exploration_results
 from .agents.persona_registry import PersonaRegistry
 from .models import AttackPath, AttackStep
+from .knowledge.kb_loader import get_technique_context
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +51,9 @@ PERSONA_CAPABILITY_LEVELS = {
 def build_swarm_aware_prompt(
     persona: dict,
     asset_graph_summary: str,
-    shared_graph_snapshot: dict
+    shared_graph_snapshot: dict,
+    security_findings_context: str = "",
+    vuln_context = None
 ) -> str:
     """Build a swarm-aware prompt that includes shared graph intelligence.
 
@@ -61,6 +65,8 @@ def build_swarm_aware_prompt(
         persona: Persona configuration dict with role, goal, backstory, etc.
         asset_graph_summary: JSON string of infrastructure asset graph
         shared_graph_snapshot: Current state of shared attack graph
+        security_findings_context: Pre-identified security findings from LLM analysis
+        vuln_context: Optional VulnContext with vulnerability intelligence
 
     Returns:
         Enhanced backstory string with swarm intelligence context
@@ -106,18 +112,67 @@ def build_swarm_aware_prompt(
     swarm_intel += "   - diverges_from_swarm: true (if your path explores new techniques)\n\n"
 
     swarm_intel += "CRITICAL: Maintain the standard kill chain output schema:\n"
-    swarm_intel += "- Each attack path must have 3-5 steps\n"
+    swarm_intel += "- Each attack path must have up to 10 steps\n"
     swarm_intel += "- Each step MUST include: technique_id (MITRE ATT&CK), technique_name, target_asset, "
     swarm_intel += "action_description, outcome, mitigation (with mitigation_id, mitigation_name, description, aws_service_action)\n"
     swarm_intel += "- Add the reinforces_swarm OR diverges_from_swarm flag at the PATH level (not step level)\n"
 
-    # Build complete backstory with swarm intelligence
+    # Build complete backstory with swarm intelligence and dynamic security reasoning
+    security_reasoning = persona.get('security_reasoning_approach', '')
+
     full_backstory = (
         f"{persona['backstory']}\n\n"
-        f"You are analysing the following cloud infrastructure:\n"
+        f"=== YOUR SECURITY REASONING APPROACH ===\n"
+        f"{security_reasoning}\n\n"
+        f"=== INFRASTRUCTURE TO ANALYZE ===\n"
+        f"You are analysing the following cloud infrastructure. Apply your security reasoning approach "
+        f"to identify EVERY misconfiguration, vulnerability, and attack-enabling condition you can find. "
+        f"Do not limit yourself to well-known conditions. Use your full security knowledge to discover "
+        f"what specific attributes or relationships make resources dangerous and how you would exploit them.\n\n"
         f"{asset_graph_summary}\n\n"
-        f"{swarm_intel}"
     )
+
+    # Add security findings if available
+    if security_findings_context:
+        full_backstory += f"\n{security_findings_context}\n\n"
+        full_backstory += (
+            "These findings were identified through LLM security analysis of the complete IaC. "
+            "Use these as starting points for your attack path generation. You may also identify "
+            "additional findings the initial analysis missed—your reasoning is not limited to this list.\n\n"
+        )
+
+        # === SELECTIVE TECHNIQUE REFERENCE INJECTION ===
+        # Extract technique IDs from security findings context and inject
+        # only the relevant KB entries (not the entire KB)
+        technique_ids = set(re.findall(r'T\d{4}(?:\.\d{3})?', security_findings_context))
+
+        if technique_ids:
+            logger.info(f"Injecting KB context for {len(technique_ids)} techniques: {sorted(technique_ids)}")
+
+            # Build technique reference section header
+            full_backstory += "\n" + "=" * 80 + "\n"
+            full_backstory += "TECHNIQUE REFERENCE (relevant to findings above)\n"
+            full_backstory += "=" * 80 + "\n\n"
+            full_backstory += (
+                f"The following {len(technique_ids)} techniques were identified in the security analysis.\n"
+                "Reference material is provided below to guide your attack path construction.\n\n"
+            )
+
+            # Inject context for each discovered technique
+            for tid in sorted(technique_ids):
+                ctx = get_technique_context(tid)
+                if ctx:
+                    full_backstory += ctx + "\n"
+                else:
+                    logger.debug(f"No KB entry found for technique {tid}")
+
+            full_backstory += "=" * 80 + "\n\n"
+
+    # Add vulnerability intelligence if available
+    if vuln_context:
+        full_backstory += f"\n{vuln_context.combined_prompt}\n\n"
+
+    full_backstory += swarm_intel
 
     return full_backstory
 
@@ -242,7 +297,10 @@ async def run_swarm_exploration(
     enabled_personas: List[Dict[str, Any]],
     llm_config: dict,
     execution_order: str = "capability_ascending",
-    progress_callback: Optional[Callable[[str, int, int, dict], None]] = None
+    security_findings_context: str = "",
+    security_findings_list: Optional[List[Any]] = None,
+    progress_callback: Optional[Callable[[str, int, int, dict], None]] = None,
+    vuln_context = None
 ) -> dict:
     """Run stigmergic swarm exploration with sequential persona execution.
 
@@ -255,7 +313,10 @@ async def run_swarm_exploration(
         enabled_personas: List of enabled persona configuration dicts
         llm_config: LLM configuration dict with model and provider
         execution_order: Persona ordering strategy (default: capability_ascending)
+        security_findings_context: Pre-identified security findings from LLM analysis
+        security_findings_list: Optional list of SecurityFinding objects for seeding
         progress_callback: Optional callback(persona_name, step, total, snapshot)
+        vuln_context: Optional VulnContext with vulnerability intelligence
 
     Returns:
         Dictionary with attack_paths, shared_graph_snapshot, emergent_insights, activity_log
@@ -268,6 +329,30 @@ async def run_swarm_exploration(
 
     # Create shared attack graph
     shared_graph = SharedAttackGraph()
+
+    # Seed graph from security findings if available
+    if security_findings_list:
+        logger.info("Seeding shared graph from security findings")
+        seeded_count = shared_graph.seed_from_findings(security_findings_list)
+        logger.info(f"Seeded {seeded_count} high-priority nodes from findings")
+
+    # Seed graph from matched vulnerabilities if available
+    if vuln_context:
+        logger.info("Seeding shared graph from matched vulnerabilities")
+        vuln_seed_count = 0
+        for vuln in vuln_context.matched_vulns[:5]:  # Top 5 highest risk vulns
+            if vuln.risk_score >= 7.0:
+                shared_graph.deposit_node(
+                    asset_id=vuln.resource_id,
+                    technique_id=vuln.technique_id,
+                    technique_name=vuln.technique_name,
+                    kill_chain_phase=vuln.kill_chain_phase,
+                    deposited_by=f'vuln_seed:{vuln.vuln_id}',
+                    tags=['vuln_seeded', vuln.match_confidence, vuln.vuln_type],
+                    initial_pheromone=vuln.risk_score / 10.0 * 2.5,  # Scale to 0-2.5 range
+                )
+                vuln_seed_count += 1
+        logger.info(f"Seeded {vuln_seed_count} high-risk vulnerability nodes")
 
     # Serialize asset graph for prompts
     asset_graph_json = json.dumps(asset_graph, indent=2)
@@ -295,7 +380,9 @@ async def run_swarm_exploration(
         full_backstory = build_swarm_aware_prompt(
             persona=persona,
             asset_graph_summary=asset_graph_json,
-            shared_graph_snapshot=snapshot
+            shared_graph_snapshot=snapshot,
+            security_findings_context=security_findings_context,
+            vuln_context=vuln_context
         )
 
         # Get LLM instance
@@ -319,7 +406,7 @@ async def run_swarm_exploration(
         task_description = (
             f"Analyse the provided AWS cloud infrastructure through the lens of {display_name}.\n\n"
             f"Identify realistic, end-to-end attack paths from initial reconnaissance to achieving an objective.\n\n"
-            f"Each attack path MUST follow the cyber kill chain with EXACTLY 3 to 5 steps.\n\n"
+            f"Each attack path MUST follow the cyber kill chain with up to 10 steps.\n\n"
             f"CRITICAL REQUIREMENTS:\n"
             f"1. Each step MUST include: technique_id (MITRE ATT&CK T-number), technique_name, "
             f"target_asset (exact name from infrastructure), action_description, outcome, mitigation\n"
@@ -330,7 +417,7 @@ async def run_swarm_exploration(
         )
 
         expected_output = (
-            "JSON array of attack paths with 3-5 steps each. "
+            "JSON array of attack paths with up to 10 steps each. "
             "Each path must include: name, objective, impact_type, difficulty, threat_actor, steps (array), "
             "and EITHER reinforces_swarm: true OR diverges_from_swarm: true. "
             "Each step must have: step_number, kill_chain_phase, technique_id, technique_name, "

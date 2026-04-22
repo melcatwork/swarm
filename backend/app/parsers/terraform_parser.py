@@ -310,6 +310,34 @@ class TerraformParser:
             if field in config:
                 properties[field] = config[field]
 
+        # Preserve EC2 metadata_options for IMDS signal detection
+        if resource_type == "aws_instance" and "metadata_options" in config:
+            properties["metadata_options"] = config["metadata_options"]
+
+        # Preserve security group ingress/egress rules for signal detection
+        if resource_type == "aws_security_group":
+            if "ingress" in config:
+                properties["ingress"] = config["ingress"]
+            if "egress" in config:
+                properties["egress"] = config["egress"]
+
+        # Preserve IAM policy documents for privilege escalation detection
+        if resource_type in ["aws_iam_role", "aws_iam_policy", "aws_iam_role_policy", "aws_iam_user_policy"]:
+            if "policy" in config:
+                properties["policy"] = config["policy"]
+            if "assume_role_policy" in config:
+                properties["assume_role_policy"] = config["assume_role_policy"]
+            # Preserve inline policy for role policies
+            if "inline_policy" in config:
+                properties["inline_policy"] = config["inline_policy"]
+
+        # Preserve CloudTrail event selectors for logging gap detection
+        if resource_type == "aws_cloudtrail" and "event_selector" in config:
+            properties["event_selector"] = config["event_selector"]
+
+        # Preserve original resource type for signal matching
+        properties["resource_type"] = resource_type
+
         return properties
 
     def _extract_reference(self, value: Any) -> str:

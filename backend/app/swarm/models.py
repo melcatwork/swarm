@@ -41,7 +41,7 @@ class MitigationDetail(BaseModel):
 class AttackStep(BaseModel):
     """Single step in a kill chain attack path with defense-in-depth mitigations."""
 
-    step_number: int = Field(..., ge=1, le=5, description="Step number (1-5)")
+    step_number: int = Field(..., ge=1, le=10, description="Step number (1-10)")
     kill_chain_phase: str = Field(..., description="Kill chain phase name")
     technique_id: str = Field(..., description="MITRE ATT&CK T-number")
     technique_name: str = Field(..., description="Human-readable technique name")
@@ -71,7 +71,7 @@ class AttackPath(BaseModel):
     threat_actor: str = Field(..., description="Persona name")
     impact_type: str = Field(..., description="confidentiality/integrity/availability")
     difficulty: str = Field(..., description="low/medium/high")
-    steps: List[AttackStep] = Field(..., description="3-5 attack steps")
+    steps: List[AttackStep] = Field(..., description="Up to 10 attack steps")
     composite_score: Optional[float] = Field(default=None, description="Evaluation score")
     confidence: Optional[str] = Field(default=None, description="high/medium/low")
     challenged: bool = Field(default=False, description="Whether path was challenged by blue team")

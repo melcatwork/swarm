@@ -11,6 +11,7 @@ All swarm operations require a properly configured LLM provider
 
 import json
 import logging
+import os
 import signal
 import time
 import asyncio
@@ -22,6 +23,15 @@ from pydantic import BaseModel, Field
 
 from app.swarm import PersonaRegistry
 from app.swarm.job_tracker import get_job_tracker, JobStatus
+from app.swarm.iac_serialiser import IaCSerialiser
+from app.swarm.security_analyser import SecurityAnalyser
+from app.swarm.persona_selector import select_personas_for_context, get_persona_priority_order
+from app.swarm.output_filter import (
+    filter_and_rank_paths,
+    extract_confirmed_findings_as_paths,
+    build_confirmed_findings_summary,
+)
+from app.swarm.consensus_aggregator import aggregate_consensus, get_high_consensus_techniques
 # Note: Lazy import crews to avoid CrewAI/LiteLLM initialization at module load time
 # CrewAI will default to OpenAI if imported before environment is configured
 # from app.swarm.crews import (
@@ -515,10 +525,84 @@ def _build_threat_intel_context() -> tuple[str, int]:
         return "Error loading threat intelligence.", 0
 
 
+async def _run_security_analysis(
+    asset_graph: Dict[str, Any],
+    raw_iac: Dict[str, Any] = None,
+    model: str = None,
+) -> tuple[str, List[Dict[str, Any]]]:
+    """
+    Run LLM-based security analysis on infrastructure.
+
+    Serialises the IaC and uses an LLM to dynamically identify misconfigurations
+    and vulnerabilities that agents can use as starting points.
+
+    Args:
+        asset_graph: Parsed infrastructure asset graph dictionary
+        raw_iac: Optional raw IaC dictionary (Terraform HCL or CloudFormation)
+        model: Optional model name to use instead of default
+
+    Returns:
+        Tuple of (formatted_findings_context, findings_list)
+    """
+    try:
+        logger.info("Running LLM-based security analysis on IaC")
+
+        # Serialise IaC for LLM analysis
+        serialiser = IaCSerialiser()
+        serialised_iac = serialiser.serialise(asset_graph, raw_iac)
+
+        logger.info(f"Serialised IaC: {len(serialised_iac)} characters")
+
+        # Get LLM instance for analysis
+        from app.swarm.crews import get_llm
+        llm = get_llm(model_override=model)
+
+        # Run security analysis
+        analyser = SecurityAnalyser(llm)
+        findings = await analyser.analyse(serialised_iac, max_findings=30)
+
+        logger.info(f"Security analysis found {len(findings)} issues")
+
+        # Format findings for prompt injection
+        findings_context = analyser.format_for_prompt(findings)
+
+        # Convert findings to dicts for API response
+        findings_dicts = [
+            {
+                "finding_id": f.finding_id,
+                "resource_id": f.resource_id,
+                "resource_type": f.resource_type,
+                "category": f.category,
+                "title": f.title,
+                "description": f.description,
+                "severity": f.severity,
+                "technique_id": f.technique_id,
+                "technique_name": f.technique_name,
+                "kill_chain_phase": f.kill_chain_phase,
+                "exploitation_detail": f.exploitation_detail,
+                "exploitation_commands": f.exploitation_commands,
+                "detection_gap": f.detection_gap,
+                "affected_relationships": f.affected_relationships,
+                "remediation": f.remediation,
+                "confidence": f.confidence,
+                "reasoning": f.reasoning,
+            }
+            for f in findings
+        ]
+
+        return findings_context, findings_dicts
+
+    except Exception as e:
+        logger.error(f"Security analysis failed: {e}", exc_info=True)
+        return "SECURITY ANALYSIS: Analysis failed due to error.", []
+
+
 def _run_exploration(
     asset_graph: Dict[str, Any],
     threat_intel_context: str = "",
+    security_findings_context: str = "",
     model: str = None,
+    vuln_context = None,
 ) -> List[Dict]:
     """
     Internal helper to run exploration phase.
@@ -526,7 +610,9 @@ def _run_exploration(
     Args:
         asset_graph: Infrastructure asset graph dictionary
         threat_intel_context: Optional threat intelligence context string
+        security_findings_context: Pre-identified security findings from LLM analysis
         model: Optional model name to use instead of default
+        vuln_context: Optional VulnContext with vulnerability intelligence
 
     Returns:
         List of attack path dictionaries
@@ -542,7 +628,13 @@ def _run_exploration(
 
     # Build and execute crew with optional model override
     logger.info(f"Building exploration crew{' with model: ' + model if model else ''}")
-    crew = build_exploration_crew(asset_graph_json, threat_intel_context, model_override=model)
+    crew = build_exploration_crew(
+        asset_graph_json,
+        threat_intel_context,
+        security_findings_context=security_findings_context,
+        model_override=model,
+        vuln_context=vuln_context
+    )
 
     logger.info(f"Executing exploration crew with {len(crew.agents)} agents")
     crew_output = crew.kickoff()
@@ -553,6 +645,83 @@ def _run_exploration(
 
     logger.info(f"Exploration complete: {len(attack_paths)} attack paths discovered")
     return attack_paths
+
+
+async def _run_path_evaluation(
+    attack_paths: List[Dict],
+    security_findings: List[Dict],
+    asset_graph: Dict[str, Any],
+    model: str = None,
+) -> List[Dict]:
+    """
+    Internal helper to run LLM-based path evaluation against security findings.
+
+    Uses PathEvaluator to score paths based on evidence grounding, cloud
+    specificity, technique accuracy, exploitability, and detection evasion.
+
+    Args:
+        attack_paths: List of attack path dictionaries from exploration
+        security_findings: List of security findings from SecurityAnalyser
+        asset_graph: Infrastructure asset graph dictionary
+        model: Optional model name to use instead of default
+
+    Returns:
+        List of attack paths enriched with llm_evaluation and adjusted scores
+
+    Raises:
+        Exception: If evaluation fails
+    """
+    from app.swarm.path_evaluator import PathEvaluator
+    from app.swarm.crews import get_llm
+
+    logger.info("Running LLM-based path evaluation against security findings")
+
+    # Get LLM instance
+    llm = get_llm(model_override=model)
+
+    # Create evaluator
+    evaluator = PathEvaluator(llm)
+
+    # Evaluate each path
+    evaluated_paths = []
+    for idx, path in enumerate(attack_paths, 1):
+        try:
+            logger.info(f"Evaluating path {idx}/{len(attack_paths)}: {path.get('name', '')}")
+
+            # Run evaluation
+            result = await evaluator.evaluate_path(
+                path=path,
+                findings=security_findings,
+                asset_graph=asset_graph,
+            )
+
+            # Add evaluation results to path
+            path['llm_evaluation'] = {
+                'evidence_score': result.evidence_score,
+                'cloud_specificity': result.cloud_specificity,
+                'technique_accuracy': result.technique_accuracy,
+                'exploitability': result.exploitability,
+                'detection_evasion': result.detection_evasion,
+                'composite_score': result.composite_score,
+                'grounded_findings': result.grounded_findings,
+                'ungrounded_steps': result.ungrounded_steps,
+                'evaluator_reasoning': result.evaluator_reasoning,
+                'improvement_suggestions': result.improvement_suggestions,
+            }
+
+            # Set adjusted composite score (can be used for ranking)
+            path['llm_composite_score'] = result.composite_score
+
+            evaluated_paths.append(path)
+
+        except Exception as e:
+            logger.error(f"Failed to evaluate path {idx}: {e}", exc_info=True)
+            # Add path without evaluation
+            evaluated_paths.append(path)
+            continue
+
+    logger.info(f"Path evaluation complete: {len(evaluated_paths)} paths evaluated")
+    return evaluated_paths
 
 
 def _run_evaluation(
@@ -1008,6 +1177,22 @@ class PipelineResponse(BaseModel):
         ...,
         description="Parsed infrastructure asset graph",
     )
+    security_findings: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Pre-identified security findings from LLM analysis of IaC",
+    )
+    vulnerability_intelligence: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Vulnerability intelligence including cloud signals, matched CVEs/abuse patterns, and assembled chains",
+    )
+    confirmed_findings: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="High-confidence confirmed vulnerability findings from VulnMatcher (CONFIRMED confidence only)",
+    )
+    persona_selection: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Persona selection details including injected specialists for high-confidence findings",
+    )
     exploration_summary: Dict[str, Any] = Field(
         ...,
         description="Summary of exploration phase (Layer 1)",
@@ -1145,23 +1330,111 @@ async def run_full_pipeline(
         logger.info("Building threat intelligence context")
         threat_intel_context, intel_count = _build_threat_intel_context()
 
+        # Run security analysis
+        logger.info("Phase 1.5: Running LLM-based security analysis")
+        security_findings_context, security_findings_list = await _run_security_analysis(
+            asset_graph_dict,
+            raw_iac=None,  # TODO: Pass raw IaC if available
+            model=model
+        )
+
+        # Phase 1.6: Build vulnerability intelligence context
+        logger.info("Phase 1.6: Building vulnerability intelligence context")
+        from app.swarm.vuln_intel.vuln_context_builder import VulnContextBuilder
+        vuln_builder = VulnContextBuilder(nvd_api_key=os.getenv('NVD_API_KEY'))
+        vuln_context = await vuln_builder.build(
+            asset_graph=asset_graph_dict,
+            raw_iac=None,
+            include_cve_lookup=bool(os.getenv('NVD_API_KEY')) and os.getenv('ENABLE_CVE_LOOKUP', 'true').lower() == 'true',
+        )
+        logger.info(
+            f"Vulnerability context built: {vuln_context.stats['vulns_matched']} vulns, "
+            f"{vuln_context.stats['chains_assembled']} chains"
+        )
+
+        # Phase 1.7: Dynamic persona selection based on findings
+        logger.info("Phase 1.7: Dynamic persona selection")
+        enabled_personas_dict = persona_registry.get_enabled()
+        requested_persona_ids = list(enabled_personas_dict.keys())
+        all_persona_ids = [p for p in persona_registry.get_all().keys()]
+
+        active_personas, injected_personas = select_personas_for_context(
+            requested_personas=requested_persona_ids,
+            vuln_context=vuln_context,
+            run_type='multi',
+            all_available_personas=all_persona_ids,
+        )
+        active_personas = get_persona_priority_order(active_personas, vuln_context)
+        logger.info(
+            f"Persona selection: requested={len(requested_persona_ids)} enabled, "
+            f"final={len(active_personas)}, injected={injected_personas}"
+        )
+
+        # Temporarily reconfigure personas if injections were made
+        if injected_personas:
+            logger.info(f"Enabling {len(injected_personas)} injected specialists")
+            for persona_id in injected_personas:
+                try:
+                    persona_registry.toggle_persona(persona_id, True)
+                except Exception as e:
+                    logger.warning(f"Failed to enable {persona_id}: {e}")
+
         # Phase 2: Exploration (Layer 1)
         logger.info("Pipeline Phase 2: Exploration (Layer 1)")
         exploration_start = time.time()
-        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
+        exploration_paths = _run_exploration(
+            asset_graph_dict,
+            threat_intel_context,
+            security_findings_context=security_findings_context,
+            model=model,
+            vuln_context=vuln_context
+        )
         exploration_time = time.time() - exploration_start
+
+        # Phase 2.1: Consensus aggregation (multi-agent coordination)
+        logger.info("Pipeline Phase 2.1: Consensus aggregation")
+        # Group paths by agent for consensus analysis
+        agent_paths = {}
+        for path in exploration_paths:
+            agent_name = path.get('threat_actor', 'unknown')
+            if agent_name not in agent_paths:
+                agent_paths[agent_name] = []
+            agent_paths[agent_name].append(path)
+
+        consensus_findings = aggregate_consensus(agent_paths)
+        high_consensus = get_high_consensus_techniques(consensus_findings, min_agent_count=2)
+        logger.info(
+            f"Consensus aggregation: {len(consensus_findings)} unique combinations, "
+            f"{len(high_consensus)} high-consensus techniques"
+        )
 
         enabled_personas = persona_registry.get_enabled()
         exploration_summary = {
-            "agents_used": len(enabled_personas),
+            "agents_used": len(active_personas),
             "raw_paths_found": len(exploration_paths),
             "execution_time_seconds": round(exploration_time, 2),
             "threat_intel_items": intel_count,
+            "consensus_findings": len(high_consensus),
         }
 
         logger.info(
             f"Exploration complete: {len(exploration_paths)} paths from "
-            f"{len(enabled_personas)} agents in {exploration_time:.2f}s"
+            f"{len(active_personas)} agents in {exploration_time:.2f}s"
+        )
+
+        # Phase 2.5: LLM-based Path Evaluation against Security Findings
+        logger.info("Pipeline Phase 2.5: LLM-based Path Evaluation")
+        path_eval_start = time.time()
+        exploration_paths = await _run_path_evaluation(
+            exploration_paths,
+            security_findings_list,
+            asset_graph_dict,
+            model=model
+        )
+        path_eval_time = time.time() - path_eval_start
+        logger.info(
+            f"Path evaluation complete: {len(exploration_paths)} paths evaluated "
+            f"in {path_eval_time:.2f}s"
         )
 
         # Phase 3: Evaluation (Layer 2)
@@ -1224,9 +1497,23 @@ async def run_full_pipeline(
             f"final paths in {adversarial_time:.2f}s"
         )
 
+        # Phase 4.5: Output filtering and confirmed findings extraction
+        logger.info("Pipeline Phase 4.5: Output filtering")
+        confirmed_paths = extract_confirmed_findings_as_paths(vuln_context)
+        all_paths = confirmed_paths + adversarial_result["final_paths"]
+        filtered_final_paths = filter_and_rank_paths(
+            paths=all_paths,
+            vuln_context=vuln_context,
+        )
+        confirmed_findings = build_confirmed_findings_summary(vuln_context)
+        logger.info(
+            f"Output filtering complete: {len(confirmed_findings)} confirmed findings, "
+            f"{len(filtered_final_paths)} final paths"
+        )
+
         # Phase 5: Mitigation Mapping
         logger.info("Pipeline Phase 5: Mitigation Mapping")
-        final_paths_with_mitigations = map_mitigations(adversarial_result["final_paths"])
+        final_paths_with_mitigations = map_mitigations(filtered_final_paths)
 
         # Get executive summary
         executive_summary = adversarial_result.get("executive_summary", "")
@@ -1237,9 +1524,49 @@ async def run_full_pipeline(
             f"{len(final_paths_with_mitigations)} validated paths with mitigations"
         )
 
+        # Build vulnerability intelligence response
+        vuln_intel_response = {
+            "stats": vuln_context.stats,
+            "matched_vulns": [
+                {
+                    "vuln_id": v.vuln_id,
+                    "vuln_type": v.vuln_type,
+                    "name": v.name,
+                    "resource_id": v.resource_id,
+                    "technique_id": v.technique_id,
+                    "cvss_score": v.cvss_score,
+                    "risk_score": v.risk_score,
+                    "in_kev": v.in_kev,
+                    "match_confidence": v.match_confidence,
+                    "exploitation_commands": v.exploitation_commands[:3],
+                    "detection_gap": v.detection_gap,
+                }
+                for v in vuln_context.matched_vulns[:20]
+            ],
+            "assembled_chains": [
+                {
+                    "chain_id": c.chain_id,
+                    "chain_score": c.chain_score,
+                    "has_kev_vuln": c.has_kev_vuln,
+                    "undetectable_steps": c.undetectable_steps,
+                    "summary": c.summary,
+                }
+                for c in vuln_context.assembled_chains
+            ],
+        }
+
         response = PipelineResponse(
             status="ok",
             asset_graph=asset_graph_dict,
+            security_findings=security_findings_list,
+            vulnerability_intelligence=vuln_intel_response,
+            confirmed_findings=confirmed_findings,
+            persona_selection={
+                'requested': requested_persona_ids,
+                'final': active_personas,
+                'injected_for_high_confidence_findings': injected_personas,
+                'consensus': high_consensus[:10],  # Top 10 high-consensus techniques
+            },
             exploration_summary=exploration_summary,
             evaluation_summary=evaluation_summary,
             adversarial_summary=adversarial_summary,
@@ -1287,6 +1614,10 @@ async def run_full_pipeline(
         return PipelineResponse(
             status="error",
             asset_graph={},
+            security_findings=[],
+            vulnerability_intelligence={},
+            confirmed_findings=[],
+            persona_selection={},
             exploration_summary={},
             evaluation_summary={},
             adversarial_summary={},
@@ -1369,18 +1700,62 @@ async def run_quick_pipeline(
         logger.info("Building threat intelligence context")
         threat_intel_context, intel_count = _build_threat_intel_context()
 
+        # Run security analysis
+        logger.info("Phase 1.5: Running LLM-based security analysis")
+        security_findings_context, security_findings_list = await _run_security_analysis(
+            asset_graph_dict,
+            raw_iac=None,
+            model=model
+        )
+
+        # Phase 1.6: Build vulnerability intelligence context
+        logger.info("Phase 1.6: Building vulnerability intelligence context")
+        from app.swarm.vuln_intel.vuln_context_builder import VulnContextBuilder
+        vuln_builder = VulnContextBuilder(nvd_api_key=os.getenv('NVD_API_KEY'))
+        vuln_context = await vuln_builder.build(
+            asset_graph=asset_graph_dict,
+            raw_iac=None,
+            include_cve_lookup=bool(os.getenv('NVD_API_KEY')) and os.getenv('ENABLE_CVE_LOOKUP', 'true').lower() == 'true',
+        )
+        logger.info(
+            f"Vulnerability context built: {vuln_context.stats['vulns_matched']} vulns, "
+            f"{vuln_context.stats['chains_assembled']} chains"
+        )
+
+        # Phase 1.7: Dynamic persona selection based on findings
+        logger.info("Phase 1.7: Dynamic persona selection")
+        all_persona_ids = list(original_states.keys())
+        active_personas, injected_personas = select_personas_for_context(
+            requested_personas=["apt29_cozy_bear", "scattered_spider"],
+            vuln_context=vuln_context,
+            run_type='quick',
+            all_available_personas=all_persona_ids,
+        )
+        active_personas = get_persona_priority_order(active_personas, vuln_context)
+        logger.info(
+            f"Persona selection: requested=['apt29_cozy_bear', 'scattered_spider'], "
+            f"final={active_personas}, injected={injected_personas}"
+        )
+
         # Temporarily configure personas for 2 agents test mode
-        logger.info("Configuring personas for 2 agents test mode")
+        logger.info("Configuring personas for 2 agents test mode with selected personas")
         for name in original_states.keys():
             registry.toggle_persona(name, False)
 
-        registry.toggle_persona("apt29_cozy_bear", True)
-        registry.toggle_persona("scattered_spider", True)
+        # Enable selected personas
+        for persona_id in active_personas:
+            registry.toggle_persona(persona_id, True)
 
         # Phase 2: Exploration (Layer 1) - 2 agents test mode with 2 agents
         logger.info("2 agents test Phase 2: Exploration with 2 agents")
         exploration_start = time.time()
-        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
+        exploration_paths = _run_exploration(
+            asset_graph_dict,
+            threat_intel_context,
+            security_findings_context=security_findings_context,
+            model=model,
+            vuln_context=vuln_context
+        )
         exploration_time = time.time() - exploration_start
 
         exploration_summary = {
@@ -1393,6 +1768,21 @@ async def run_quick_pipeline(
         logger.info(
             f"2 agents test exploration complete: {len(exploration_paths)} paths from "
             f"2 agents in {exploration_time:.2f}s"
+        )
+
+        # Phase 2.5: LLM-based Path Evaluation against Security Findings
+        logger.info("2 agents test Phase 2.5: LLM-based Path Evaluation")
+        path_eval_start = time.time()
+        exploration_paths = await _run_path_evaluation(
+            exploration_paths,
+            security_findings_list,
+            asset_graph_dict,
+            model=model
+        )
+        path_eval_time = time.time() - path_eval_start
+        logger.info(
+            f"Path evaluation complete: {len(exploration_paths)} paths evaluated "
+            f"in {path_eval_time:.2f}s"
         )
 
         # Phase 3: Evaluation (Layer 2)
@@ -1450,9 +1840,23 @@ async def run_quick_pipeline(
             f"final paths in {adversarial_time:.2f}s"
         )
 
+        # Phase 4.5: Output filtering and confirmed findings extraction
+        logger.info("2 agents test Phase 4.5: Output filtering")
+        confirmed_paths = extract_confirmed_findings_as_paths(vuln_context)
+        all_paths = confirmed_paths + adversarial_result["final_paths"]
+        filtered_final_paths = filter_and_rank_paths(
+            paths=all_paths,
+            vuln_context=vuln_context,
+        )
+        confirmed_findings = build_confirmed_findings_summary(vuln_context)
+        logger.info(
+            f"Output filtering complete: {len(confirmed_findings)} confirmed findings, "
+            f"{len(filtered_final_paths)} final paths"
+        )
+
         # Phase 5: Mitigation Mapping
         logger.info("2 agents test Phase 5: Mitigation Mapping")
-        final_paths_with_mitigations = map_mitigations(adversarial_result["final_paths"])
+        final_paths_with_mitigations = map_mitigations(filtered_final_paths)
 
         executive_summary = adversarial_result.get("executive_summary", "")
 
@@ -1462,9 +1866,48 @@ async def run_quick_pipeline(
             f"{len(final_paths_with_mitigations)} validated paths with mitigations"
         )
 
+        # Build vulnerability intelligence response
+        vuln_intel_response = {
+            "stats": vuln_context.stats,
+            "matched_vulns": [
+                {
+                    "vuln_id": v.vuln_id,
+                    "vuln_type": v.vuln_type,
+                    "name": v.name,
+                    "resource_id": v.resource_id,
+                    "technique_id": v.technique_id,
+                    "cvss_score": v.cvss_score,
+                    "risk_score": v.risk_score,
+                    "in_kev": v.in_kev,
+                    "match_confidence": v.match_confidence,
+                    "exploitation_commands": v.exploitation_commands[:3],
+                    "detection_gap": v.detection_gap,
+                }
+                for v in vuln_context.matched_vulns[:20]
+            ],
+            "assembled_chains": [
+                {
+                    "chain_id": c.chain_id,
+                    "chain_score": c.chain_score,
+                    "has_kev_vuln": c.has_kev_vuln,
+                    "undetectable_steps": c.undetectable_steps,
+                    "summary": c.summary,
+                }
+                for c in vuln_context.assembled_chains
+            ],
+        }
+
         response = PipelineResponse(
             status="ok",
             asset_graph=asset_graph_dict,
+            security_findings=security_findings_list,
+            vulnerability_intelligence=vuln_intel_response,
+            confirmed_findings=confirmed_findings,
+            persona_selection={
+                'requested': ["apt29_cozy_bear", "scattered_spider"],
+                'final': active_personas,
+                'injected_for_high_confidence_findings': injected_personas,
+            },
             exploration_summary=exploration_summary,
             evaluation_summary=evaluation_summary,
             adversarial_summary=adversarial_summary,
@@ -1511,6 +1954,10 @@ async def run_quick_pipeline(
         return PipelineResponse(
             status="error",
             asset_graph={},
+            security_findings=[],
+            vulnerability_intelligence={},
+            confirmed_findings=[],
+            persona_selection={},
             exploration_summary={},
             evaluation_summary={},
             adversarial_summary={},
@@ -1602,18 +2049,62 @@ async def run_single_agent_pipeline(
         logger.info("Building threat intelligence context")
         threat_intel_context, intel_count = _build_threat_intel_context()
 
+        # Run security analysis
+        logger.info("Phase 1.5: Running LLM-based security analysis")
+        security_findings_context, security_findings_list = await _run_security_analysis(
+            asset_graph_dict,
+            raw_iac=None,
+            model=model
+        )
+
+        # Phase 1.6: Build vulnerability intelligence context
+        logger.info("Phase 1.6: Building vulnerability intelligence context")
+        from app.swarm.vuln_intel.vuln_context_builder import VulnContextBuilder
+        vuln_builder = VulnContextBuilder(nvd_api_key=os.getenv('NVD_API_KEY'))
+        vuln_context = await vuln_builder.build(
+            asset_graph=asset_graph_dict,
+            raw_iac=None,
+            include_cve_lookup=bool(os.getenv('NVD_API_KEY')) and os.getenv('ENABLE_CVE_LOOKUP', 'true').lower() == 'true',
+        )
+        logger.info(
+            f"Vulnerability context built: {vuln_context.stats['vulns_matched']} vulns, "
+            f"{vuln_context.stats['chains_assembled']} chains"
+        )
+
+        # Phase 1.7: Dynamic persona selection based on findings
+        logger.info("Phase 1.7: Dynamic persona selection")
+        all_persona_ids = list(original_states.keys())
+        active_personas, injected_personas = select_personas_for_context(
+            requested_personas=[agent_name],
+            vuln_context=vuln_context,
+            run_type='single',
+            all_available_personas=all_persona_ids,
+        )
+        active_personas = get_persona_priority_order(active_personas, vuln_context)
+        logger.info(
+            f"Persona selection: requested=[{agent_name}], "
+            f"final={active_personas}, injected={injected_personas}"
+        )
+
         # Temporarily configure personas for single agent run mode
-        logger.info(f"Configuring for single agent run mode: {agent_name}")
+        logger.info(f"Configuring for single agent run mode with selected personas")
         for name in original_states.keys():
             registry.toggle_persona(name, False)
 
-        # Enable only the selected agent
-        registry.toggle_persona(agent_name, True)
+        # Enable selected personas
+        for persona_id in active_personas:
+            registry.toggle_persona(persona_id, True)
 
         # Phase 2: Exploration (Layer 1) - single agent run mode
         logger.info(f"single agent run Phase 2: Exploration with {selected_persona['display_name']}")
         exploration_start = time.time()
-        exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
+        exploration_paths = _run_exploration(
+            asset_graph_dict,
+            threat_intel_context,
+            security_findings_context=security_findings_context,
+            model=model,
+            vuln_context=vuln_context
+        )
         exploration_time = time.time() - exploration_start
 
         exploration_summary = {
@@ -1628,6 +2119,21 @@ async def run_single_agent_pipeline(
         logger.info(
             f"Single agent exploration complete: {len(exploration_paths)} paths from "
             f"{selected_persona['display_name']} in {exploration_time:.2f}s"
+        )
+
+        # Phase 2.5: LLM-based Path Evaluation against Security Findings
+        logger.info("single agent run Phase 2.5: LLM-based Path Evaluation")
+        path_eval_start = time.time()
+        exploration_paths = await _run_path_evaluation(
+            exploration_paths,
+            security_findings_list,
+            asset_graph_dict,
+            model=model
+        )
+        path_eval_time = time.time() - path_eval_start
+        logger.info(
+            f"Path evaluation complete: {len(exploration_paths)} paths evaluated "
+            f"in {path_eval_time:.2f}s"
         )
 
         # Phase 3: Evaluation (Layer 2)
@@ -1685,9 +2191,23 @@ async def run_single_agent_pipeline(
             f"final paths in {adversarial_time:.2f}s"
         )
 
+        # Phase 4.5: Output filtering and confirmed findings extraction
+        logger.info("single agent run Phase 4.5: Output filtering")
+        confirmed_paths = extract_confirmed_findings_as_paths(vuln_context)
+        all_paths = confirmed_paths + adversarial_result["final_paths"]
+        filtered_final_paths = filter_and_rank_paths(
+            paths=all_paths,
+            vuln_context=vuln_context,
+        )
+        confirmed_findings = build_confirmed_findings_summary(vuln_context)
+        logger.info(
+            f"Output filtering complete: {len(confirmed_findings)} confirmed findings, "
+            f"{len(filtered_final_paths)} final paths"
+        )
+
         # Phase 5: Mitigation Mapping
         logger.info("single agent run Phase 5: Mitigation Mapping")
-        final_paths_with_mitigations = map_mitigations(adversarial_result["final_paths"])
+        final_paths_with_mitigations = map_mitigations(filtered_final_paths)
 
         executive_summary = adversarial_result.get("executive_summary", "")
 
@@ -1697,9 +2217,48 @@ async def run_single_agent_pipeline(
             f"{len(final_paths_with_mitigations)} validated paths with mitigations"
         )
 
+        # Build vulnerability intelligence response
+        vuln_intel_response = {
+            "stats": vuln_context.stats,
+            "matched_vulns": [
+                {
+                    "vuln_id": v.vuln_id,
+                    "vuln_type": v.vuln_type,
+                    "name": v.name,
+                    "resource_id": v.resource_id,
+                    "technique_id": v.technique_id,
+                    "cvss_score": v.cvss_score,
+                    "risk_score": v.risk_score,
+                    "in_kev": v.in_kev,
+                    "match_confidence": v.match_confidence,
+                    "exploitation_commands": v.exploitation_commands[:3],
+                    "detection_gap": v.detection_gap,
+                }
+                for v in vuln_context.matched_vulns[:20]
+            ],
+            "assembled_chains": [
+                {
+                    "chain_id": c.chain_id,
+                    "chain_score": c.chain_score,
+                    "has_kev_vuln": c.has_kev_vuln,
+                    "undetectable_steps": c.undetectable_steps,
+                    "summary": c.summary,
+                }
+                for c in vuln_context.assembled_chains
+            ],
+        }
+
         response = PipelineResponse(
             status="ok",
             asset_graph=asset_graph_dict,
+            security_findings=security_findings_list,
+            vulnerability_intelligence=vuln_intel_response,
+            confirmed_findings=confirmed_findings,
+            persona_selection={
+                'requested': [agent_name],
+                'final': active_personas,
+                'injected_for_high_confidence_findings': injected_personas,
+            },
             exploration_summary=exploration_summary,
             evaluation_summary=evaluation_summary,
             adversarial_summary=adversarial_summary,
@@ -1745,6 +2304,10 @@ async def run_single_agent_pipeline(
         return PipelineResponse(
             status="error",
             asset_graph={},
+            security_findings=[],
+            vulnerability_intelligence={},
+            confirmed_findings=[],
+            persona_selection={},
             exploration_summary={},
             evaluation_summary={},
             adversarial_summary={},
@@ -1952,6 +2515,10 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
         tracker.update_job(job_id, JobStatus.PARSING, 10, "Loading threat intelligence")
         threat_intel_context, intel_count = _build_threat_intel_context()
 
+        # Note: Security analysis is skipped in background jobs to keep sync execution
+        # TODO: Make background jobs async to enable security analysis
+        security_findings_context = ""
+
         # Check for cancellation after parsing
         if tracker.is_job_cancelled(job_id):
             logger.info(f"Job {job_id[:8]} cancelled after parsing phase")
@@ -1960,17 +2527,22 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
         # Configure personas for 2 agents test mode
         registry = PersonaRegistry()
         original_states = {name: p.get("enabled", True) for name, p in registry.get_all().items()}
-        
+
         for name in original_states.keys():
             registry.toggle_persona(name, False)
         registry.toggle_persona("apt29_cozy_bear", True)
         registry.toggle_persona("scattered_spider", True)
-        
+
         try:
             # Phase 1: Exploration
             tracker.update_job(job_id, JobStatus.EXPLORATION, 20, "Exploring attack paths (2 agents test)")
             exploration_start = time.time()
-            exploration_paths = _run_exploration(asset_graph_dict, threat_intel_context, model=model)
+            exploration_paths = _run_exploration(
+                asset_graph_dict,
+                threat_intel_context,
+                security_findings_context=security_findings_context,
+                model=model
+            )
             exploration_time = time.time() - exploration_start
 
             exploration_summary = {
@@ -2039,6 +2611,7 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
             result = {
                 "status": "ok",
                 "asset_graph": asset_graph_dict,
+                "security_findings": [],  # Skipped in background jobs
                 "exploration_summary": exploration_summary,
                 "evaluation_summary": evaluation_summary,
                 "adversarial_summary": adversarial_summary,
@@ -2328,6 +2901,18 @@ class StigmergicSwarmResponse(BaseModel):
         description="Ordered list of persona names as executed"
     )
     asset_graph: Dict[str, Any] = Field(..., description="Parsed infrastructure asset graph")
+    security_findings: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Pre-identified security findings from LLM analysis of IaC"
+    )
+    vulnerability_intelligence: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Vulnerability intelligence including cloud signals, matched CVEs/abuse patterns, and assembled chains",
+    )
+    confirmed_findings: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="High-confidence confirmed vulnerability findings from VulnMatcher (CONFIRMED confidence only)",
+    )
     evaluation_summary: Dict[str, Any] = Field(
         default_factory=dict,
         description="Summary of evaluation metrics across all paths"
@@ -2439,6 +3024,28 @@ async def run_stigmergic_swarm_pipeline(
 
         logger.info(f"Executing with {len(enabled_personas_list)} enabled personas")
 
+        # Run security analysis
+        logger.info("Phase 1.5: Running LLM-based security analysis")
+        security_findings_context, security_findings_list = await _run_security_analysis(
+            asset_graph_dict,
+            raw_iac=None,
+            model=model
+        )
+
+        # Phase 1.6: Build vulnerability intelligence context
+        logger.info("Phase 1.6: Building vulnerability intelligence context")
+        from app.swarm.vuln_intel.vuln_context_builder import VulnContextBuilder
+        vuln_builder = VulnContextBuilder(nvd_api_key=os.getenv('NVD_API_KEY'))
+        vuln_context = await vuln_builder.build(
+            asset_graph=asset_graph_dict,
+            raw_iac=None,
+            include_cve_lookup=bool(os.getenv('NVD_API_KEY')) and os.getenv('ENABLE_CVE_LOOKUP', 'true').lower() == 'true',
+        )
+        logger.info(
+            f"Vulnerability context built: {vuln_context.stats['vulns_matched']} vulns, "
+            f"{vuln_context.stats['chains_assembled']} chains"
+        )
+
         # Build LLM config
         llm_config = {
             "model": model,
@@ -2452,7 +3059,10 @@ async def run_stigmergic_swarm_pipeline(
             enabled_personas=enabled_personas_list,
             llm_config=llm_config,
             execution_order=execution_order,
-            progress_callback=None  # No callback for now
+            security_findings_context=security_findings_context,
+            security_findings_list=security_findings_list,  # Pass findings for seeding
+            progress_callback=None,  # No callback for now
+            vuln_context=vuln_context
         )
 
         # Extract results
@@ -2461,6 +3071,21 @@ async def run_stigmergic_swarm_pipeline(
         emergent_insights = swarm_result.get("emergent_insights", {})
         activity_log = swarm_result.get("activity_log", [])
         execution_summary = swarm_result.get("execution_summary", {})
+
+        # Phase 2.5: LLM-based Path Evaluation against Security Findings
+        logger.info("Phase 2.5: LLM-based Path Evaluation")
+        path_eval_start = time.time()
+        attack_paths = await _run_path_evaluation(
+            attack_paths,
+            security_findings_list,
+            asset_graph_dict,
+            model=model
+        )
+        path_eval_time = time.time() - path_eval_start
+        logger.info(
+            f"Path evaluation complete: {len(attack_paths)} paths evaluated "
+            f"in {path_eval_time:.2f}s"
+        )
 
         # Phase 3: Evaluation (add scores to paths like regular pipeline)
         logger.info("Phase 3: Evaluation")
@@ -2487,9 +3112,23 @@ async def run_stigmergic_swarm_pipeline(
             f"Evaluation complete: {len(scored_paths)} paths scored in {evaluation_time:.2f}s"
         )
 
+        # Phase 3.5: Output filtering and confirmed findings extraction
+        logger.info("Phase 3.5: Output filtering")
+        confirmed_paths = extract_confirmed_findings_as_paths(vuln_context)
+        all_paths = confirmed_paths + scored_paths
+        filtered_paths = filter_and_rank_paths(
+            paths=all_paths,
+            vuln_context=vuln_context,
+        )
+        confirmed_findings = build_confirmed_findings_summary(vuln_context)
+        logger.info(
+            f"Output filtering complete: {len(confirmed_findings)} confirmed findings, "
+            f"{len(filtered_paths)} final paths"
+        )
+
         # Phase 4: Mitigation Mapping (add defence-in-depth mitigations)
         logger.info("Phase 4: Mitigation Mapping")
-        final_paths_with_mitigations = map_mitigations(scored_paths)
+        final_paths_with_mitigations = map_mitigations(filtered_paths)
 
         execution_time = time.time() - start_time
 
@@ -2504,6 +3143,37 @@ async def run_stigmergic_swarm_pipeline(
         logger.info(f"High-confidence techniques: {len(emergent_insights.get('high_confidence_techniques', []))}")
         logger.info("=" * 60)
 
+        # Build vulnerability intelligence response
+        vuln_intel_response = {
+            "stats": vuln_context.stats,
+            "matched_vulns": [
+                {
+                    "vuln_id": v.vuln_id,
+                    "vuln_type": v.vuln_type,
+                    "name": v.name,
+                    "resource_id": v.resource_id,
+                    "technique_id": v.technique_id,
+                    "cvss_score": v.cvss_score,
+                    "risk_score": v.risk_score,
+                    "in_kev": v.in_kev,
+                    "match_confidence": v.match_confidence,
+                    "exploitation_commands": v.exploitation_commands[:3],
+                    "detection_gap": v.detection_gap,
+                }
+                for v in vuln_context.matched_vulns[:20]
+            ],
+            "assembled_chains": [
+                {
+                    "chain_id": c.chain_id,
+                    "chain_score": c.chain_score,
+                    "has_kev_vuln": c.has_kev_vuln,
+                    "undetectable_steps": c.undetectable_steps,
+                    "summary": c.summary,
+                }
+                for c in vuln_context.assembled_chains
+            ],
+        }
+
         response = StigmergicSwarmResponse(
             run_type="multi_agents_swarm",
             execution_order=execution_order,
@@ -2514,6 +3184,9 @@ async def run_stigmergic_swarm_pipeline(
             activity_log=activity_log,
             personas_execution_sequence=personas_executed,
             asset_graph=asset_graph_dict,
+            security_findings=security_findings_list,
+            vulnerability_intelligence=vuln_intel_response,
+            confirmed_findings=confirmed_findings,
             evaluation_summary=evaluation_summary,
             status="ok",
             execution_time_seconds=round(execution_time, 2)
@@ -2557,6 +3230,9 @@ async def run_stigmergic_swarm_pipeline(
             activity_log=[],
             personas_execution_sequence=[],
             asset_graph={},
+            security_findings=[],
+            vulnerability_intelligence={},
+            confirmed_findings=[],
             evaluation_summary={},
             status="error",
             execution_time_seconds=round(execution_time, 2),

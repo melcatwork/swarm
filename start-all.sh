@@ -60,68 +60,117 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-# Show configured model
-OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env | cut -d'=' -f2)
-if [ -n "$OLLAMA_MODEL" ]; then
-    echo -e "${BLUE}Configured Model:${NC} ${GREEN}$OLLAMA_MODEL${NC}"
+# Show configured LLM provider and model
+LLM_PROVIDER=$(grep "^LLM_PROVIDER=" .env | cut -d'=' -f2)
+if [ -n "$LLM_PROVIDER" ]; then
+    echo -e "${BLUE}LLM Provider:${NC} ${GREEN}$LLM_PROVIDER${NC}"
+
+    case "$LLM_PROVIDER" in
+        "ollama")
+            OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env | cut -d'=' -f2)
+            echo -e "${BLUE}Ollama Model:${NC} ${GREEN}$OLLAMA_MODEL${NC}"
+            ;;
+        "bedrock")
+            BEDROCK_MODEL=$(grep "^BEDROCK_MODEL=" .env | cut -d'=' -f2)
+            echo -e "${BLUE}Bedrock Model:${NC} ${GREEN}$BEDROCK_MODEL${NC}"
+            ;;
+        "anthropic")
+            ANTHROPIC_MODEL=$(grep "^ANTHROPIC_MODEL=" .env | cut -d'=' -f2)
+            echo -e "${BLUE}Anthropic Model:${NC} ${GREEN}$ANTHROPIC_MODEL${NC}"
+            ;;
+    esac
     echo ""
 fi
 
 # =============================================================================
-# 1. Check Ollama
+# 1. Check LLM Provider
 # =============================================================================
 
-echo -e "${BLUE}[1/3] Checking Ollama...${NC}"
+echo -e "${BLUE}[1/3] Checking LLM Provider...${NC}"
 
-if ! command -v ollama &> /dev/null; then
-    echo -e "${RED}✗ Ollama not installed${NC}"
-    echo "  Install from: https://ollama.ai"
-    exit 1
-fi
+LLM_PROVIDER=$(grep "^LLM_PROVIDER=" .env | cut -d'=' -f2)
 
-# Check if Ollama is already running
-if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Ollama is already running${NC}"
-    OLLAMA_ALREADY_RUNNING=true
-else
-    echo -e "${YELLOW}Starting Ollama server...${NC}"
-    OLLAMA_ALREADY_RUNNING=false
+case "$LLM_PROVIDER" in
+    "ollama")
+        echo -e "${YELLOW}Provider: Ollama (local)${NC}"
 
-    # Start Ollama in background
-    ollama serve > "$LOG_DIR/ollama.log" 2>&1 &
-    OLLAMA_PID=$!
-    echo "ollama:$OLLAMA_PID" >> "$PID_FILE"
-
-    # Wait for Ollama to be ready
-    echo -n "  Waiting for Ollama to start"
-    for i in {1..30}; do
-        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-            echo ""
-            echo -e "${GREEN}✓ Ollama started (PID: $OLLAMA_PID)${NC}"
-            break
-        fi
-        echo -n "."
-        sleep 1
-
-        if [ $i -eq 30 ]; then
-            echo ""
-            echo -e "${RED}✗ Ollama failed to start${NC}"
-            echo "  Check logs: $LOG_DIR/ollama.log"
+        if ! command -v ollama &> /dev/null; then
+            echo -e "${RED}✗ Ollama not installed${NC}"
+            echo "  Install from: https://ollama.ai"
             exit 1
         fi
-    done
-fi
 
-# Check if model is available (using qwen3:14b for better JSON generation)
-echo -n "  Checking for qwen3:14b model... "
-if ollama list | grep -q "qwen3:14b"; then
-    echo -e "${GREEN}✓ Found${NC}"
-else
-    echo -e "${YELLOW}Not found${NC}"
-    echo -e "${YELLOW}  Pulling qwen3:14b (this may take a few minutes, ~9.3GB)...${NC}"
-    ollama pull qwen3:14b
-    echo -e "${GREEN}✓ Model downloaded${NC}"
-fi
+        # Check if Ollama is already running
+        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ Ollama is already running${NC}"
+            OLLAMA_ALREADY_RUNNING=true
+        else
+            echo -e "${YELLOW}Starting Ollama server...${NC}"
+            OLLAMA_ALREADY_RUNNING=false
+
+            # Start Ollama in background
+            ollama serve > "$LOG_DIR/ollama.log" 2>&1 &
+            OLLAMA_PID=$!
+            echo "ollama:$OLLAMA_PID" >> "$PID_FILE"
+
+            # Wait for Ollama to be ready
+            echo -n "  Waiting for Ollama to start"
+            for i in {1..30}; do
+                if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+                    echo ""
+                    echo -e "${GREEN}✓ Ollama started (PID: $OLLAMA_PID)${NC}"
+                    break
+                fi
+                echo -n "."
+                sleep 1
+
+                if [ $i -eq 30 ]; then
+                    echo ""
+                    echo -e "${RED}✗ Ollama failed to start${NC}"
+                    echo "  Check logs: $LOG_DIR/ollama.log"
+                    exit 1
+                fi
+            done
+        fi
+
+        # Check if configured model is available
+        OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+        echo -n "  Checking for $OLLAMA_MODEL model... "
+        if ollama list | grep -q "$OLLAMA_MODEL"; then
+            echo -e "${GREEN}✓ Found${NC}"
+        else
+            echo -e "${YELLOW}Not found${NC}"
+            echo -e "${YELLOW}  Pulling $OLLAMA_MODEL (this may take a few minutes)...${NC}"
+            ollama pull "$OLLAMA_MODEL"
+            echo -e "${GREEN}✓ Model downloaded${NC}"
+        fi
+        ;;
+
+    "bedrock")
+        echo -e "${YELLOW}Provider: AWS Bedrock${NC}"
+        BEDROCK_MODEL=$(grep "^BEDROCK_MODEL=" .env | cut -d'=' -f2)
+        echo -e "  Model: ${GREEN}$BEDROCK_MODEL${NC}"
+        echo -e "${BLUE}  Note: Ensure AWS credentials are configured${NC}"
+        ;;
+
+    "anthropic")
+        echo -e "${YELLOW}Provider: Anthropic API${NC}"
+        ANTHROPIC_MODEL=$(grep "^ANTHROPIC_MODEL=" .env | cut -d'=' -f2)
+        echo -e "  Model: ${GREEN}$ANTHROPIC_MODEL${NC}"
+        if grep -q "^ANTHROPIC_API_KEY=" .env; then
+            echo -e "${GREEN}✓ API key configured${NC}"
+        else
+            echo -e "${RED}✗ ANTHROPIC_API_KEY not found in .env${NC}"
+            exit 1
+        fi
+        ;;
+
+    *)
+        echo -e "${RED}✗ Unknown LLM_PROVIDER: $LLM_PROVIDER${NC}"
+        echo "  Supported providers: ollama, bedrock, anthropic"
+        exit 1
+        ;;
+esac
 
 echo ""
 
@@ -268,10 +317,14 @@ echo -e "${YELLOW}Service URLs:${NC}"
 echo -e "  ${GREEN}Frontend:${NC}  http://localhost:5173"
 echo -e "  ${GREEN}Backend:${NC}   http://localhost:8000"
 echo -e "  ${GREEN}API Docs:${NC}  http://localhost:8000/docs"
-echo -e "  ${GREEN}Ollama:${NC}    http://localhost:11434"
+if [ "$LLM_PROVIDER" = "ollama" ]; then
+    echo -e "  ${GREEN}Ollama:${NC}    http://localhost:11434"
+fi
 echo ""
 echo -e "${YELLOW}Log Files:${NC}"
-echo -e "  Ollama:   $LOG_DIR/ollama.log"
+if [ "$LLM_PROVIDER" = "ollama" ] && [ -f "$LOG_DIR/ollama.log" ]; then
+    echo -e "  Ollama:   $LOG_DIR/ollama.log"
+fi
 echo -e "  Backend:  $LOG_DIR/backend.log"
 echo -e "  Frontend: $LOG_DIR/frontend.log"
 echo ""
@@ -279,21 +332,38 @@ echo -e "${YELLOW}Quick Test Commands:${NC}"
 echo -e "  ${BLUE}# Test backend health${NC}"
 echo -e "  curl http://localhost:8000/api/health"
 echo ""
-echo -e "  ${BLUE}# Submit analysis (background mode)${NC}"
-echo -e "  curl -X POST http://localhost:8000/api/swarm/run/quick/background \\"
-echo -e "    -F \"file=@samples/file-transfer-system.tf\""
+echo -e "  ${BLUE}# Check available LLM models${NC}"
+echo -e "  curl http://localhost:8000/api/llm/models"
 echo ""
-echo -e "  ${BLUE}# Run automated test${NC}"
-echo -e "  cd backend && ./test_background_api.sh ../samples/file-transfer-system.tf"
+echo -e "  ${BLUE}# Test samples (choose one):${NC}"
+echo -e "  curl -X POST http://localhost:8000/api/swarm/run/quick \\"
+echo -e "    -F \"file=@samples/capital-one-breach-replica.tf\""
+echo -e "  curl -X POST http://localhost:8000/api/swarm/run/quick \\"
+echo -e "    -F \"file=@samples/scarleteel-breach-replica.tf\""
+echo -e "  curl -X POST http://localhost:8000/api/swarm/run/quick \\"
+echo -e "    -F \"file=@samples/llmjacking-breach-replica.tf\""
+echo ""
+echo -e "${YELLOW}Four Run Modes Available:${NC}"
+echo -e "  ${GREEN}/api/swarm/run${NC}             ${BLUE}# Full pipeline (all agents, ~25-30 min)${NC}"
+echo -e "  ${GREEN}/api/swarm/run/quick${NC}       ${BLUE}# Quick test (2 agents, ~14 min)${NC}"
+echo -e "  ${GREEN}/api/swarm/run/single${NC}      ${BLUE}# Single agent (specify ?agent_name=...)${NC}"
+echo -e "  ${GREEN}/api/swarm/run/stigmergic${NC}  ${BLUE}# Stigmergic swarm (sequential, emergent)${NC}"
+echo ""
+echo -e "${YELLOW}Recent Updates (2026-04-21):${NC}"
+echo -e "  ${GREEN}✓${NC} Attack paths now support up to ${GREEN}10 steps${NC} (was 3-5)"
+echo -e "  ${GREEN}✓${NC} All four run types updated"
+echo -e "  ${GREEN}✓${NC} Test suite: pytest tests/test_ten_step_paths.py"
 echo ""
 echo -e "${YELLOW}Recommended Agents for Single Agent Testing:${NC}"
-echo -e "  ${GREEN}apt29_cozy_bear${NC}      ${BLUE}# Best for cloud infrastructure (nation-state sophistication)${NC}"
-echo -e "  ${GREEN}scattered_spider${NC}    ${BLUE}# Best for identity/SSO/MFA testing${NC}"
-echo -e "  ${BLUE}Use in frontend: Select agent → Run Single Agent Test${NC}"
+echo -e "  ${GREEN}apt29_cozy_bear${NC}       ${BLUE}# Nation-state sophistication, cloud-native${NC}"
+echo -e "  ${GREEN}scattered_spider${NC}     ${BLUE}# Identity/SSO/MFA specialist${NC}"
+echo -e "  ${GREEN}cloud_native_attacker${NC} ${BLUE}# Cloud services abuse expert${NC}"
 echo ""
 echo -e "${YELLOW}View Real-Time Logs:${NC}"
 echo -e "  tail -f $LOG_DIR/backend.log   ${BLUE}# Backend logs${NC}"
-echo -e "  tail -f $LOG_DIR/ollama.log    ${BLUE}# Ollama logs${NC}"
+if [ "$LLM_PROVIDER" = "ollama" ]; then
+    echo -e "  tail -f $LOG_DIR/ollama.log    ${BLUE}# Ollama logs${NC}"
+fi
 echo -e "  tail -f $LOG_DIR/frontend.log  ${BLUE}# Frontend logs${NC}"
 echo ""
 echo -e "${RED}Press Ctrl+C to stop all services${NC}"

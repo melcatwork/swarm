@@ -140,7 +140,9 @@ def get_llm(model_override: str = None, provider_override: str = None) -> LLM:
 def build_exploration_crew(
     asset_graph_json: str,
     threat_intel_context: str = "",
+    security_findings_context: str = "",
     model_override: str = None,
+    vuln_context = None,
 ) -> Crew:
     """
     Build a threat modeling exploration crew from enabled personas.
@@ -152,7 +154,9 @@ def build_exploration_crew(
     Args:
         asset_graph_json: JSON string representation of the infrastructure asset graph
         threat_intel_context: Optional threat intelligence context
+        security_findings_context: Pre-identified security findings from LLM analysis
         model_override: Optional model name to use instead of default (e.g., "qwen3:14b")
+        vuln_context: Optional VulnContext with vulnerability intelligence
 
     Returns:
         CrewAI Crew ready to execute threat modeling tasks
@@ -178,11 +182,35 @@ def build_exploration_crew(
     tasks = []
 
     for persona_name, persona_config in enabled_personas.items():
-        # Build backstory with infrastructure context
+        # Build backstory with infrastructure context and dynamic security reasoning
+        security_reasoning = persona_config.get('security_reasoning_approach', '')
+
         full_backstory = (
             f"{persona_config['backstory']}\n\n"
-            f"You are analysing the following cloud infrastructure:\n"
+            f"=== YOUR SECURITY REASONING APPROACH ===\n"
+            f"{security_reasoning}\n\n"
+            f"=== INFRASTRUCTURE TO ANALYZE ===\n"
+            f"Apply your security reasoning approach to the infrastructure below. Identify every misconfiguration, "
+            f"vulnerability, and attack-enabling condition you can find—not just the well-known ones. For each finding, "
+            f"explain what specific attribute or relationship makes it dangerous and how you would exploit it. "
+            f"Do not limit yourself to conditions you have been pre-briefed on. Use your full security knowledge.\n\n"
             f"{asset_graph_json}\n\n"
+        )
+
+        # Add security findings if available
+        if security_findings_context:
+            full_backstory += f"\n{security_findings_context}\n\n"
+            full_backstory += (
+                "These findings were identified through LLM security analysis of the complete IaC. "
+                "Use these as starting points for your attack path generation. You may also identify "
+                "additional findings the initial analysis missed—your reasoning is not limited to this list.\n\n"
+            )
+
+        # Add vulnerability intelligence if available
+        if vuln_context:
+            full_backstory += f"\n{vuln_context.combined_prompt}\n\n"
+
+        full_backstory += (
             f"Current threat intelligence context:\n"
             f"{threat_intel_context if threat_intel_context else 'No specific threat intelligence provided.'}"
         )
@@ -208,7 +236,7 @@ def build_exploration_crew(
             f"Analyse the provided AWS cloud infrastructure asset graph through the lens of {persona_config['display_name']}.\n\n"
             f"Identify realistic, end-to-end attack paths from initial reconnaissance to achieving an objective "
             f"(data exfiltration, system disruption, or persistent access).\n\n"
-            f"Each attack path MUST follow the cyber kill chain with EXACTLY 3 to 5 steps. "
+            f"Each attack path MUST follow the cyber kill chain with up to 10 steps. "
             f"Each step must map to one of these kill chain phases in order:\n\n"
             f"Step 1 - Reconnaissance or Initial Access: How the attacker gains their first foothold. "
             f"Could be exploiting a public-facing service, using phished credentials, or abusing a supply chain dependency.\n\n"
@@ -409,7 +437,7 @@ def parse_exploration_results(crew_output) -> List[Dict]:
                         # Normalize steps
                         if "steps" in path and isinstance(path["steps"], list):
                             normalized_steps = []
-                            for step_idx, step in enumerate(path["steps"][:5]):  # Limit to 5 steps
+                            for step_idx, step in enumerate(path["steps"][:10]):  # Limit to 10 steps
                                 try:
                                     normalized_step = {}
 
@@ -1010,7 +1038,7 @@ def build_adversarial_crew(
             "2) Entry points that could be exploited more fully, "
             "3) Alternative kill chain sequences using different technique combinations, "
             "4) High-value targets missed by exploration. "
-            "Propose 1-3 additional kill chain attack paths (3-5 steps each) that fill significant gaps. "
+            "Propose 1-3 additional kill chain attack paths (up to 10 steps each) that fill significant gaps."
             "Assess what percentage of the attack surface has been covered by the existing kill chains."
         ),
         expected_output=(

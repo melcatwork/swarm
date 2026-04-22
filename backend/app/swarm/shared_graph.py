@@ -16,7 +16,7 @@ Key concepts:
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from threading import RLock
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Set, Optional, Tuple, Any
 from uuid import uuid4
 
 
@@ -635,3 +635,87 @@ class SharedAttackGraph:
         clusters.sort(key=lambda c: c["co_occurrence_count"], reverse=True)
 
         return clusters
+
+    def seed_from_findings(self, findings: List[Any], initial_pheromone: Optional[float] = None) -> int:
+        """Seed the shared graph with nodes from security findings.
+
+        Replaces hard-coded incident patterns with finding-based seeding.
+        For each CRITICAL or HIGH severity finding, deposit a pheromone node
+        with strength proportional to severity and confidence.
+
+        This guides the swarm toward confirmed security issues rather than
+        pre-seeding specific incident patterns.
+
+        Args:
+            findings: List of SecurityFinding objects from SecurityAnalyser
+            initial_pheromone: Optional override for initial pheromone strength
+
+        Returns:
+            Number of nodes seeded
+        """
+        severity_strength = {
+            'CRITICAL': 2.5,
+            'HIGH': 2.0,
+            'MEDIUM': 1.5,
+            'LOW': 1.0,
+        }
+
+        seeded = 0
+        for finding in findings:
+            # Handle both SecurityFinding objects and dicts
+            if hasattr(finding, 'severity'):
+                severity = finding.severity
+                confidence = finding.confidence
+                resource_id = finding.resource_id
+                technique_id = finding.technique_id
+                technique_name = finding.technique_name
+                kill_chain_phase = finding.kill_chain_phase
+                category = finding.category
+                finding_id = finding.finding_id
+            else:
+                severity = finding.get('severity', 'MEDIUM')
+                confidence = finding.get('confidence', 'MEDIUM')
+                resource_id = finding.get('resource_id', '')
+                technique_id = finding.get('technique_id', '')
+                technique_name = finding.get('technique_name', '')
+                kill_chain_phase = finding.get('kill_chain_phase', '')
+                category = finding.get('category', '')
+                finding_id = finding.get('finding_id', '')
+
+            # Only seed CRITICAL or HIGH severity findings
+            if severity not in ('CRITICAL', 'HIGH'):
+                continue
+
+            # Calculate pheromone strength based on severity and confidence
+            if initial_pheromone is not None:
+                strength = initial_pheromone
+            else:
+                strength = severity_strength.get(severity, 1.5)
+                if confidence == 'HIGH':
+                    strength *= 1.2
+
+            # Deposit node with higher initial pheromone
+            try:
+                self.deposit_node(
+                    asset_id=resource_id,
+                    technique_id=technique_id,
+                    technique_name=technique_name,
+                    kill_chain_phase=kill_chain_phase,
+                    deposited_by=f'security_analyser:{finding_id}',
+                    tags=['analyser_seeded', severity, category]
+                )
+
+                # Override pheromone strength for seeded nodes
+                index_key = (resource_id, technique_id)
+                if index_key in self._asset_technique_index:
+                    node_id = self._asset_technique_index[index_key]
+                    self._nodes[node_id].pheromone_strength = strength
+
+                seeded += 1
+
+            except Exception as e:
+                logger.warning(f"Failed to seed finding {finding_id}: {e}")
+                continue
+
+        logger.info(f"Seeded {seeded} nodes from security findings")
+        return seeded

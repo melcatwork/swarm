@@ -51,21 +51,45 @@ tmux select-pane -t "$SESSION_NAME":0.0
 tmux split-window -v -t "$SESSION_NAME"
 
 # =============================================================================
-# Pane 0: Ollama
+# Pane 0: LLM Provider (Ollama if configured, otherwise status)
 # =============================================================================
 
 tmux select-pane -t "$SESSION_NAME":0.0
-tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${BLUE}=== OLLAMA ===${NC}'" C-m
-tmux send-keys -t "$SESSION_NAME":0.0 "# Check if Ollama is running" C-m
 
-# Check if Ollama is already running
-if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${GREEN}✓ Ollama already running${NC}'" C-m
-    tmux send-keys -t "$SESSION_NAME":0.0 "ollama list" C-m
+# Check LLM provider from .env
+if [ -f ".env" ]; then
+    LLM_PROVIDER=$(grep "^LLM_PROVIDER=" .env | cut -d'=' -f2)
 else
-    tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${YELLOW}Starting Ollama...${NC}'" C-m
-    tmux send-keys -t "$SESSION_NAME":0.0 "ollama serve" C-m
-    sleep 3
+    LLM_PROVIDER="ollama"
+fi
+
+if [ "$LLM_PROVIDER" = "ollama" ]; then
+    tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${BLUE}=== OLLAMA (Local LLM) ===${NC}'" C-m
+    tmux send-keys -t "$SESSION_NAME":0.0 "# Check if Ollama is running" C-m
+
+    # Check if Ollama is already running
+    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+        tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${GREEN}✓ Ollama already running${NC}'" C-m
+        tmux send-keys -t "$SESSION_NAME":0.0 "ollama list" C-m
+    else
+        tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${YELLOW}Starting Ollama...${NC}'" C-m
+        tmux send-keys -t "$SESSION_NAME":0.0 "ollama serve" C-m
+        sleep 3
+    fi
+else
+    tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${BLUE}=== LLM PROVIDER STATUS ===${NC}'" C-m
+    tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${GREEN}Provider: $LLM_PROVIDER${NC}'" C-m
+    if [ "$LLM_PROVIDER" = "bedrock" ]; then
+        BEDROCK_MODEL=$(grep "^BEDROCK_MODEL=" .env 2>/dev/null | cut -d'=' -f2)
+        tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${BLUE}Model: $BEDROCK_MODEL${NC}'" C-m
+        tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${YELLOW}AWS Bedrock - no local server needed${NC}'" C-m
+    elif [ "$LLM_PROVIDER" = "anthropic" ]; then
+        ANTHROPIC_MODEL=$(grep "^ANTHROPIC_MODEL=" .env 2>/dev/null | cut -d'=' -f2)
+        tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${BLUE}Model: $ANTHROPIC_MODEL${NC}'" C-m
+        tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${YELLOW}Anthropic API - no local server needed${NC}'" C-m
+    fi
+    tmux send-keys -t "$SESSION_NAME":0.0 "echo ''" C-m
+    tmux send-keys -t "$SESSION_NAME":0.0 "echo -e '${GREEN}This pane is for monitoring only${NC}'" C-m
 fi
 
 # =============================================================================
@@ -127,19 +151,28 @@ ${YELLOW}Service URLs:${NC}
   ${GREEN}Frontend:${NC}  http://localhost:5173
   ${GREEN}Backend:${NC}   http://localhost:8000
   ${GREEN}API Docs:${NC}  http://localhost:8000/docs
-  ${GREEN}Ollama:${NC}    http://localhost:11434
 
 ${YELLOW}Quick Test Commands:${NC}
   ${BLUE}# Check backend health${NC}
   curl http://localhost:8000/api/health
 
-  ${BLUE}# Run background analysis${NC}
-  cd backend
-  ./test_background_api.sh ../samples/file-transfer-system.tf
+  ${BLUE}# Check available models${NC}
+  curl http://localhost:8000/api/llm/models
 
-  ${BLUE}# Submit file manually${NC}
-  curl -X POST http://localhost:8000/api/swarm/run/quick/background \\
-    -F \"file=@samples/file-transfer-system.tf\"
+  ${BLUE}# Quick test (14 min, 2 agents)${NC}
+  curl -X POST http://localhost:8000/api/swarm/run/quick \\
+    -F \"file=@samples/capital-one-breach-replica.tf\"
+
+${YELLOW}Four Run Modes Available:${NC}
+  ${GREEN}/api/swarm/run${NC}             - Full (all agents, 25-30 min)
+  ${GREEN}/api/swarm/run/quick${NC}       - Quick (2 agents, 14 min)
+  ${GREEN}/api/swarm/run/single${NC}      - Single agent
+  ${GREEN}/api/swarm/run/stigmergic${NC}  - Stigmergic swarm
+
+${YELLOW}Recent Updates (2026-04-21):${NC}
+  ${GREEN}✓${NC} Attack paths now support ${GREEN}up to 10 steps${NC}
+  ${GREEN}✓${NC} Multi-provider: Ollama/Bedrock/Anthropic
+  ${GREEN}✓${NC} Test suite: pytest tests/test_ten_step_paths.py
 
 ${YELLOW}Tmux Commands:${NC}
   ${BLUE}Ctrl+B then arrow keys${NC}  - Switch between panes
@@ -147,7 +180,6 @@ ${YELLOW}Tmux Commands:${NC}
   ${BLUE}Ctrl+B then d${NC}            - Detach (keeps running)
   ${BLUE}tmux attach -t swarm-tm${NC}  - Re-attach later
   ${BLUE}Ctrl+C in each pane${NC}      - Stop services
-  ${BLUE}exit${NC} in each pane        - Close pane
   ${BLUE}./stop-all.sh${NC}            - Stop everything
 
 ${BLUE}=================================${NC}
