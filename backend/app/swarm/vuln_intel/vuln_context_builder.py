@@ -130,11 +130,12 @@ class VulnContextBuilder:
             f"{sum(1 for v in matched_vulns if v.risk_score >= 8.0)} critical)"
         )
 
-        # Step 3: Assemble chains
+        # Step 3: Assemble chains (1 primary + 4 alternates)
         logger.info("[VulnContextBuilder] Step 3: Assembling attack chains")
         assembled_chains = self.chain_assembler.assemble(
             matched_vulns=matched_vulns,
             asset_graph=asset_graph,
+            max_chains=5,
         )
         chain_prompt = self.chain_assembler.format_for_prompt(assembled_chains)
         logger.info(

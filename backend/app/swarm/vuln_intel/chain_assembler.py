@@ -114,12 +114,12 @@ class ChainAssembler:
         self,
         matched_vulns: list[MatchedVuln],
         asset_graph: dict,
-        max_chains: int = 3,
+        max_chains: int = 5,
     ) -> list[AssembledChain]:
         if not matched_vulns:
             return []
 
-        # Group by kill chain phase
+        # Group by kill chain phase and sort by risk score
         by_phase: dict[str, list[MatchedVuln]] = {}
         for v in matched_vulns:
             phase = v.kill_chain_phase
@@ -127,25 +127,28 @@ class ChainAssembler:
                 by_phase[phase] = []
             by_phase[phase].append(v)
 
+        # Sort vulnerabilities in each phase by risk score (descending)
+        for phase in by_phase:
+            by_phase[phase].sort(key=lambda v: v.risk_score, reverse=True)
+
         # Build primary chain from best vuln per phase
         primary = self._build_chain(
-            by_phase, matched_vulns, 'primary'
+            by_phase, matched_vulns, 'primary', rank_offset=0
         )
         chains = [primary] if primary else []
 
-        # Build alternate chains using second-best vulns
+        # Build 4 alternate chains using different vulnerability rankings
         if len(matched_vulns) > 3 and max_chains > 1:
-            alt_by_phase: dict[str, list[MatchedVuln]] = {}
-            for phase, vulns in by_phase.items():
-                if len(vulns) > 1:
-                    alt_by_phase[phase] = vulns[1:]
-                else:
-                    alt_by_phase[phase] = vulns
-            alt = self._build_chain(
-                alt_by_phase, matched_vulns, 'alternate'
-            )
-            if alt and alt.chain_id != primary.chain_id:
-                chains.append(alt)
+            for alt_num in range(1, min(5, max_chains)):
+                alt = self._build_chain(
+                    by_phase, matched_vulns, f'alternate-{alt_num}', rank_offset=alt_num
+                )
+                # Only add if different from existing chains
+                if alt and not any(alt.chain_id == c.chain_id for c in chains):
+                    chains.append(alt)
+                    # Stop if we've hit max_chains
+                    if len(chains) >= max_chains:
+                        break
 
         return chains[:max_chains]
 
@@ -154,6 +157,7 @@ class ChainAssembler:
         by_phase: dict,
         all_vulns: list[MatchedVuln],
         chain_type: str,
+        rank_offset: int = 0,
     ) -> Optional[AssembledChain]:
         covered_phases = sorted(
             by_phase.keys(),
@@ -166,23 +170,22 @@ class ChainAssembler:
         steps: list[ChainStep] = []
 
         for i, phase in enumerate(covered_phases):
-            vulns_in_phase = sorted(
-                by_phase[phase],
-                key=lambda v: v.risk_score,
-                reverse=True
-            )
-            best = vulns_in_phase[0]
+            vulns_in_phase = by_phase[phase]  # Already sorted by risk score in assemble()
+
+            # Select vuln based on rank_offset, with wraparound if not enough vulns
+            vuln_idx = rank_offset % len(vulns_in_phase) if len(vulns_in_phase) > 0 else 0
+            selected_vuln = vulns_in_phase[vuln_idx]
             steps.append(ChainStep(
                 phase=phase,
-                technique_id=best.technique_id,
-                technique_name=best.technique_name,
-                vuln_id=best.vuln_id,
-                vuln_name=best.name,
-                resource_id=best.resource_id,
-                description=best.description,
-                exploitation_commands=best.exploitation_commands,
-                detection_gap=best.detection_gap,
-                risk_score=best.risk_score,
+                technique_id=selected_vuln.technique_id,
+                technique_name=selected_vuln.technique_name,
+                vuln_id=selected_vuln.vuln_id,
+                vuln_name=selected_vuln.name,
+                resource_id=selected_vuln.resource_id,
+                description=selected_vuln.description,
+                exploitation_commands=selected_vuln.exploitation_commands,
+                detection_gap=selected_vuln.detection_gap,
+                risk_score=selected_vuln.risk_score,
                 is_gap_filler=False,
             ))
 
@@ -193,7 +196,7 @@ class ChainAssembler:
                 if gap_key in GAP_FILLERS:
                     filler = GAP_FILLERS[gap_key]
                     # Find a suitable resource for the gap step
-                    resource = best.resource_id
+                    resource = selected_vuln.resource_id
                     steps.append(ChainStep(
                         phase=f'{phase}_to_{next_phase}',
                         technique_id=filler['technique_id'],
