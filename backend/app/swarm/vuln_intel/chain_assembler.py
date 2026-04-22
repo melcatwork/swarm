@@ -235,7 +235,7 @@ class ChainAssembler:
             if s.vuln_id
         ]
         name = (
-            f'{chain_type.title()} chain: '
+            f'{chain_type.title()} attack path: '
             + ' → '.join(vuln_ids[:2])
         )
 

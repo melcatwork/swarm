@@ -625,14 +625,21 @@ def analyze_post_mitigation_impact(
 
     # Risk reduction calculation based on CSA risk levels (not composite scores)
     # This aligns with what users see in per-path CSA risk band displays
+    # ONLY include primary and alternate attack paths (confirmed_vuln_synthesis)
+    # Excludes agent exploration paths
     original_csa_total = sum([
         path.get("csa_risk_score", {}).get("risk_level", 0)
         for path in attack_paths
+        if path.get("source") == "confirmed_vuln_synthesis"
     ])
     residual_csa_total = sum([
         p.residual_csa_risk_score.get("risk_level", 0)
         for p in post_mitigation_paths
-        if p.residual_csa_risk_score
+        if p.residual_csa_risk_score and p.path_id in [
+            path.get("id") or path.get("path_id") or path.get("name", "")
+            for path in attack_paths
+            if path.get("source") == "confirmed_vuln_synthesis"
+        ]
     ])
 
     # Fallback to composite scores if CSA scores not available

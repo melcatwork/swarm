@@ -61,7 +61,7 @@ export default function ResidualRiskSummary({ residualRiskAssessment, mitigation
               color: 'var(--color-text-tertiary)',
             }}
           >
-            CSA CII 5×5 Risk Matrix — After applying {mitigationsApplied} mitigation{mitigationsApplied !== 1 ? 's' : ''}
+            CSA CII 5×5 Risk Matrix — After applying {mitigationsApplied} mitigation{mitigationsApplied !== 1 ? 's' : ''} on primary and alternate attack paths
           </div>
         </div>
 
@@ -130,7 +130,7 @@ export default function ResidualRiskSummary({ residualRiskAssessment, mitigation
                 color: 'var(--color-text-tertiary)',
               }}
             >
-              Achieved through applied mitigations
+              For primary and alternate attack paths
             </div>
           </div>
         </div>
