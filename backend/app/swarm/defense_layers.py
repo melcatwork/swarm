@@ -19,8 +19,9 @@ class DefenseLayer(str, Enum):
     """Defense in depth layers."""
     PREVENTIVE = "preventive"  # Stop attack before it happens
     DETECTIVE = "detective"    # Detect attack in progress
-    CORRECTIVE = "corrective"  # Respond to and recover from attack
     ADMINISTRATIVE = "administrative"  # Policies, procedures, training
+    RESPONSE = "response"      # Respond to active incidents
+    RECOVERY = "recovery"      # Recover from successful attacks
 
 
 class MitigationPriority(str, Enum):
@@ -93,9 +94,9 @@ DEFENSE_IN_DEPTH_MITIGATIONS = {
                 "effectiveness": "High - Rapid detection of account manipulation",
             },
         ],
-        DefenseLayer.CORRECTIVE: [
+        DefenseLayer.RESPONSE: [
             {
-                "mitigation_id": "M1078.004-C1",
+                "mitigation_id": "M1078.004-R1",
                 "mitigation_name": "Automated Credential Rotation and Revocation",
                 "description": "Automatically rotate compromised credentials. Revoke suspicious sessions immediately. Use AWS Systems Manager Parameter Store or Secrets Manager for automated rotation. Implement break-glass procedures for emergency access.",
                 "aws_service_action": "Use Secrets Manager with automatic rotation. Create Lambda functions to revoke access keys on GuardDuty findings. Implement Systems Manager Session Manager for break-glass access.",
@@ -104,13 +105,24 @@ DEFENSE_IN_DEPTH_MITIGATIONS = {
                 "effectiveness": "High - Limits exposure time of compromised credentials",
             },
             {
-                "mitigation_id": "M1078.004-C2",
+                "mitigation_id": "M1078.004-R2",
                 "mitigation_name": "Incident Response Playbooks",
                 "description": "Develop and test incident response procedures for compromised credentials. Include isolation steps, forensic data collection, and communication plans. Conduct regular tabletop exercises.",
                 "aws_service_action": "Create AWS Systems Manager Automation runbooks for common incidents. Use AWS Step Functions for orchestration. Store playbooks in Wiki or Confluence.",
                 "priority": MitigationPriority.MEDIUM,
                 "implementation_effort": "High - 2-4 weeks",
                 "effectiveness": "Medium - Reduces mean time to respond (MTTR)",
+            },
+        ],
+        DefenseLayer.RECOVERY: [
+            {
+                "mitigation_id": "M1078.004-RV1",
+                "mitigation_name": "Account Recovery Procedures",
+                "description": "Establish procedures for recovering compromised accounts. Document steps for restoring access, rotating all credentials, and validating system integrity after credential compromise.",
+                "aws_service_action": "Create AWS Systems Manager Automation documents for account recovery. Use AWS Backup to restore compromised resources. Document recovery time objectives (RTO).",
+                "priority": MitigationPriority.MEDIUM,
+                "implementation_effort": "Medium - 1-2 weeks",
+                "effectiveness": "Medium - Enables rapid recovery from compromise",
             },
         ],
         DefenseLayer.ADMINISTRATIVE: [
@@ -185,15 +197,26 @@ DEFENSE_IN_DEPTH_MITIGATIONS = {
                 "effectiveness": "High - Identifies vulnerabilities before exploitation",
             },
         ],
-        DefenseLayer.CORRECTIVE: [
+        DefenseLayer.RESPONSE: [
             {
-                "mitigation_id": "M1190-C1",
+                "mitigation_id": "M1190-R1",
                 "mitigation_name": "Automated Patching and Remediation",
                 "description": "Implement automated patching for OS and application dependencies. Use AWS Systems Manager for patch compliance. Deploy security updates within 24 hours of release for critical vulnerabilities.",
                 "aws_service_action": "Configure Systems Manager Patch Manager with maintenance windows. Use AWS CloudFormation for immutable infrastructure. Implement blue-green deployments for rapid rollback.",
                 "priority": MitigationPriority.CRITICAL,
                 "implementation_effort": "Medium - 1-2 weeks",
                 "effectiveness": "High - Reduces window of exposure",
+            },
+        ],
+        DefenseLayer.RECOVERY: [
+            {
+                "mitigation_id": "M1190-RV1",
+                "mitigation_name": "Incident Recovery and Business Continuity",
+                "description": "Maintain disaster recovery plans for exploited applications. Use AWS Backup and cross-region replication for critical data. Test recovery procedures quarterly.",
+                "aws_service_action": "Implement AWS Backup with automated snapshots. Use RDS automated backups with point-in-time recovery. Test failover procedures regularly.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "Medium - 2-3 weeks",
+                "effectiveness": "High - Enables rapid recovery from exploitation",
             },
         ],
         DefenseLayer.ADMINISTRATIVE: [
@@ -259,9 +282,20 @@ DEFENSE_IN_DEPTH_MITIGATIONS = {
                 "effectiveness": "High - Identifies sensitive data exposure",
             },
         ],
-        DefenseLayer.CORRECTIVE: [
+        DefenseLayer.RESPONSE: [
             {
-                "mitigation_id": "M1530-C1",
+                "mitigation_id": "M1530-R1",
+                "mitigation_name": "Automated S3 Access Revocation",
+                "description": "Automatically revoke suspicious S3 access when anomalies detected. Quarantine affected buckets. Trigger incident response workflows immediately.",
+                "aws_service_action": "Create Lambda functions triggered by GuardDuty S3 findings to revoke IAM permissions. Use EventBridge for automated response. Implement bucket policy updates to block access.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "Medium - 1 week",
+                "effectiveness": "High - Stops active data exfiltration",
+            },
+        ],
+        DefenseLayer.RECOVERY: [
+            {
+                "mitigation_id": "M1530-RV1",
                 "mitigation_name": "Implement S3 Versioning and Object Lock",
                 "description": "Enable S3 versioning to prevent data deletion. Use S3 Object Lock for compliance and ransomware protection. Implement MFA Delete for additional protection. Regular backup to separate account.",
                 "aws_service_action": "Enable versioning on all buckets. Configure Object Lock with retention policies. Enable MFA Delete on critical buckets. Use S3 Replication to backup account. Implement lifecycle policies.",
@@ -324,15 +358,26 @@ DEFENSE_IN_DEPTH_MITIGATIONS = {
                 "effectiveness": "High - Continuous compliance monitoring",
             },
         ],
-        DefenseLayer.CORRECTIVE: [
+        DefenseLayer.RESPONSE: [
             {
-                "mitigation_id": "M1098-C1",
+                "mitigation_id": "M1098-R1",
                 "mitigation_name": "Automated IAM Remediation",
                 "description": "Automatically remediate non-compliant IAM configurations. Revoke suspicious permissions. Disable compromised users. Implement automated rollback of unauthorized changes.",
                 "aws_service_action": "Use AWS Config remediation actions with Systems Manager Automation. Create Lambda functions for custom remediation. Implement approval workflows for sensitive changes. Log all automated actions.",
                 "priority": MitigationPriority.HIGH,
                 "implementation_effort": "High - 2-4 weeks",
                 "effectiveness": "High - Reduces exposure time",
+            },
+        ],
+        DefenseLayer.RECOVERY: [
+            {
+                "mitigation_id": "M1098-RV1",
+                "mitigation_name": "IAM Configuration Restoration",
+                "description": "Maintain backups of IAM policies and configurations. Implement procedures to restore known-good IAM state after manipulation attacks. Document recovery steps.",
+                "aws_service_action": "Use AWS Config to track IAM configuration history. Create Systems Manager Automation for configuration restore. Store policy backups in version-controlled repository.",
+                "priority": MitigationPriority.MEDIUM,
+                "implementation_effort": "Medium - 1-2 weeks",
+                "effectiveness": "Medium - Enables rapid IAM state restoration",
             },
         ],
         DefenseLayer.ADMINISTRATIVE: [
@@ -380,15 +425,26 @@ DEFENSE_IN_DEPTH_MITIGATIONS = {
                 "effectiveness": "High - Detects unauthorized access",
             },
         ],
-        DefenseLayer.CORRECTIVE: [
+        DefenseLayer.RESPONSE: [
             {
-                "mitigation_id": "M1133-C1",
+                "mitigation_id": "M1133-R1",
                 "mitigation_name": "Automated Session Termination",
                 "description": "Automatically terminate sessions based on risk signals: access from unusual locations, failed authentication attempts, or suspicious commands. Implement session timeout policies.",
                 "aws_service_action": "Use Lambda functions triggered by GuardDuty findings to terminate sessions. Configure Session Manager with idle timeout and max duration. Implement automated incident response workflows.",
                 "priority": MitigationPriority.MEDIUM,
                 "implementation_effort": "Medium - 1-2 weeks",
                 "effectiveness": "Medium - Limits attacker dwell time",
+            },
+        ],
+        DefenseLayer.RECOVERY: [
+            {
+                "mitigation_id": "M1133-RV1",
+                "mitigation_name": "Remote Access Audit and Restoration",
+                "description": "After remote access compromise, audit all accessed systems, rotate credentials, and verify system integrity. Document recovery procedures and lessons learned.",
+                "aws_service_action": "Use CloudTrail to audit session activity. Rotate all credentials for accessed systems. Use AWS Inspector to verify system integrity. Generate incident reports.",
+                "priority": MitigationPriority.MEDIUM,
+                "implementation_effort": "Medium - 1-2 weeks",
+                "effectiveness": "Medium - Ensures complete recovery from compromise",
             },
         ],
         DefenseLayer.ADMINISTRATIVE: [
@@ -445,15 +501,26 @@ DEFENSE_IN_DEPTH_MITIGATIONS = {
                 "effectiveness": "High - Detects service failures",
             },
         ],
-        DefenseLayer.CORRECTIVE: [
+        DefenseLayer.RESPONSE: [
             {
-                "mitigation_id": "M1562.001-C1",
+                "mitigation_id": "M1562.001-R1",
                 "mitigation_name": "Automated Security Service Recovery",
                 "description": "Automatically re-enable disabled security services. Implement self-healing infrastructure for monitoring and logging. Escalate to security team when automation fails.",
                 "aws_service_action": "Use AWS Config remediation to re-enable services. Create Lambda functions for automated recovery. Use Step Functions for complex recovery workflows. Log all recovery actions to Security Hub.",
                 "priority": MitigationPriority.HIGH,
                 "implementation_effort": "High - 2-3 weeks",
                 "effectiveness": "High - Minimizes security blind spots",
+            },
+        ],
+        DefenseLayer.RECOVERY: [
+            {
+                "mitigation_id": "M1562.001-RV1",
+                "mitigation_name": "Forensic Analysis and Service Restoration",
+                "description": "After security service tampering, conduct forensic analysis to determine what was missed during blind period. Restore full logging and monitoring capabilities. Review and strengthen protections.",
+                "aws_service_action": "Use CloudTrail log analysis to identify blind spots. Restore all security services to full functionality. Use AWS Security Hub to verify security posture. Generate incident timeline.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "Medium - 1-2 weeks",
+                "effectiveness": "High - Ensures complete security restoration",
             },
         ],
         DefenseLayer.ADMINISTRATIVE: [
@@ -465,6 +532,140 @@ DEFENSE_IN_DEPTH_MITIGATIONS = {
                 "priority": MitigationPriority.MEDIUM,
                 "implementation_effort": "Medium - 2-3 weeks",
                 "effectiveness": "Medium - Ensures organizational readiness",
+            },
+        ],
+    },
+
+    "T1552.005": {  # Unsecured Credentials: Cloud Instance Metadata API
+        DefenseLayer.PREVENTIVE: [
+            {
+                "mitigation_id": "M1552.005-P1",
+                "mitigation_name": "Enforce IMDSv2 on All Instances",
+                "description": "Require Instance Metadata Service Version 2 (IMDSv2) which uses session tokens, making metadata harvesting much harder. Set hop limit to 1 to prevent forwarding attacks.",
+                "aws_service_action": "Use EC2 modify-instance-metadata-options to enforce IMDSv2. Set HttpTokens=required and HttpPutResponseHopLimit=1. Use Launch Templates with IMDSv2 enforcement.",
+                "priority": MitigationPriority.CRITICAL,
+                "implementation_effort": "Low - 1-2 days",
+                "effectiveness": "High - Blocks 95%+ of IMDS attacks",
+            },
+            {
+                "mitigation_id": "M1552.005-P2",
+                "mitigation_name": "Network Restrictions for Metadata Service",
+                "description": "Block access to 169.254.169.254 using security groups and network ACLs where possible. Implement container networking policies to restrict IMDS access.",
+                "aws_service_action": "Configure VPC network ACLs to block 169.254.169.254 for non-EC2 workloads. Use ECS task networking policies. Implement Kubernetes Network Policies for EKS.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "Medium - 1 week",
+                "effectiveness": "High - Defense in depth",
+            },
+        ],
+        DefenseLayer.DETECTIVE: [
+            {
+                "mitigation_id": "M1552.005-D1",
+                "mitigation_name": "Monitor IMDSv1 Usage",
+                "description": "Create CloudWatch metrics to detect IMDSv1 API calls. Alert on unusual patterns of metadata queries. Use VPC Flow Logs to monitor traffic to 169.254.169.254.",
+                "aws_service_action": "Enable VPC Flow Logs and create CloudWatch filters for 169.254.169.254 traffic. Use GuardDuty to detect unusual IMDS queries. Create custom CloudWatch metrics.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "Low - 2-3 days",
+                "effectiveness": "High - Early detection of IMDS abuse",
+            },
+        ],
+        DefenseLayer.RESPONSE: [
+            {
+                "mitigation_id": "M1552.005-R1",
+                "mitigation_name": "Automated IMDSv2 Enforcement",
+                "description": "Automatically enforce IMDSv2 on instances detected using IMDSv1. Rotate credentials of instances with suspicious metadata access patterns.",
+                "aws_service_action": "Create Lambda function triggered by CloudWatch alarms to enforce IMDSv2. Use AWS Config remediation. Rotate IAM instance profile credentials automatically.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "Medium - 1-2 weeks",
+                "effectiveness": "High - Rapid remediation",
+            },
+        ],
+        DefenseLayer.RECOVERY: [
+            {
+                "mitigation_id": "M1552.005-RV1",
+                "mitigation_name": "Credential Rotation and Incident Analysis",
+                "description": "After IMDS compromise, rotate all affected instance profile credentials. Analyze CloudTrail logs to determine what actions were taken with compromised credentials.",
+                "aws_service_action": "Use IAM to delete and recreate instance profile roles. Analyze CloudTrail for API calls made with compromised credentials. Use AWS Access Analyzer for blast radius assessment.",
+                "priority": MitigationPriority.CRITICAL,
+                "implementation_effort": "Low - 1-2 days",
+                "effectiveness": "High - Limits credential exposure",
+            },
+        ],
+        DefenseLayer.ADMINISTRATIVE: [
+            {
+                "mitigation_id": "M1552.005-A1",
+                "mitigation_name": "IMDSv2 Compliance Policy",
+                "description": "Establish organization-wide policy requiring IMDSv2 for all EC2 instances. Include in security baselines and deployment standards. Regular compliance audits.",
+                "aws_service_action": "Document policy in organization standards. Use AWS Config rules to enforce compliance. Include in onboarding training. Quarterly compliance reports.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "Medium - 2-3 weeks",
+                "effectiveness": "Medium - Long-term risk reduction",
+            },
+        ],
+    },
+
+    "T1071": {  # Application Layer Protocol (C2)
+        DefenseLayer.PREVENTIVE: [
+            {
+                "mitigation_id": "M1071-P1",
+                "mitigation_name": "Deploy AWS Network Firewall",
+                "description": "Implement AWS Network Firewall with stateful inspection rules. Block known C2 domains and IPs. Use threat intelligence feeds for dynamic blocking.",
+                "aws_service_action": "Deploy Network Firewall in VPC. Configure stateful domain filtering. Enable AWS-managed threat intelligence rule groups. Use custom rules for organization-specific threats.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "High - 2-4 weeks",
+                "effectiveness": "High - Blocks known C2 infrastructure",
+            },
+            {
+                "mitigation_id": "M1071-P2",
+                "mitigation_name": "Restrict Egress to Known Destinations",
+                "description": "Implement egress filtering to allow only known-good destinations. Use VPC endpoints for AWS services. Require proxy for internet access with TLS inspection.",
+                "aws_service_action": "Configure security groups with restrictive egress rules. Deploy VPC endpoints for AWS services. Use AWS Network Firewall or proxy for internet egress. Implement allowlist approach.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "High - 3-4 weeks",
+                "effectiveness": "High - Reduces C2 communication channels",
+            },
+        ],
+        DefenseLayer.DETECTIVE: [
+            {
+                "mitigation_id": "M1071-D1",
+                "mitigation_name": "Enable Comprehensive Network Monitoring",
+                "description": "Enable VPC Flow Logs, Route 53 Resolver Query Logging, and Network Firewall logs. Use GuardDuty for threat intelligence-based detection. Monitor for beaconing and data exfiltration patterns.",
+                "aws_service_action": "Enable VPC Flow Logs to CloudWatch. Configure Route 53 Resolver Query Logging. Enable GuardDuty. Send logs to centralized SIEM. Create anomaly detection rules.",
+                "priority": MitigationPriority.CRITICAL,
+                "implementation_effort": "Medium - 1-2 weeks",
+                "effectiveness": "High - Detects C2 communication",
+            },
+        ],
+        DefenseLayer.RESPONSE: [
+            {
+                "mitigation_id": "M1071-R1",
+                "mitigation_name": "Automated C2 Blocking",
+                "description": "Automatically block detected C2 domains and IPs. Isolate affected instances. Trigger incident response workflows.",
+                "aws_service_action": "Use Lambda to update Network Firewall rules based on GuardDuty findings. Modify security groups to isolate compromised instances. Trigger Step Functions for incident response.",
+                "priority": MitigationPriority.CRITICAL,
+                "implementation_effort": "High - 2-3 weeks",
+                "effectiveness": "High - Rapid containment",
+            },
+        ],
+        DefenseLayer.RECOVERY: [
+            {
+                "mitigation_id": "M1071-RV1",
+                "mitigation_name": "Network Forensics and Cleanup",
+                "description": "Analyze network logs to determine C2 communication timeline and data exfiltrated. Rebuild affected systems from known-good images. Strengthen network controls.",
+                "aws_service_action": "Use CloudWatch Logs Insights for log analysis. Rebuild instances from approved AMIs. Review and strengthen security group rules. Document lessons learned.",
+                "priority": MitigationPriority.HIGH,
+                "implementation_effort": "High - 1-2 weeks",
+                "effectiveness": "High - Complete incident recovery",
+            },
+        ],
+        DefenseLayer.ADMINISTRATIVE: [
+            {
+                "mitigation_id": "M1071-A1",
+                "mitigation_name": "Network Security Policy and Training",
+                "description": "Establish network security baselines. Document egress requirements. Train teams on secure network architecture. Regular architecture reviews.",
+                "aws_service_action": "Create network security standards documentation. Use AWS Service Catalog for approved network patterns. Conduct quarterly network architecture reviews. Include in developer training.",
+                "priority": MitigationPriority.MEDIUM,
+                "implementation_effort": "Medium - 2-3 weeks",
+                "effectiveness": "Medium - Long-term security improvement",
             },
         ],
     },
@@ -495,8 +696,9 @@ def get_defense_in_depth_mitigations(technique_id: str) -> Dict[DefenseLayer, Li
     return {
         DefenseLayer.PREVENTIVE: [],
         DefenseLayer.DETECTIVE: [],
-        DefenseLayer.CORRECTIVE: [],
         DefenseLayer.ADMINISTRATIVE: [],
+        DefenseLayer.RESPONSE: [],
+        DefenseLayer.RECOVERY: [],
     }
 
 
