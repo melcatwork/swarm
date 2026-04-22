@@ -1212,31 +1212,33 @@
 
 .results-stats-bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 1rem;
   background-color: white;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 1.5rem;
+  padding: 1rem;
 }
 
 .stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
 .stat-item .stat-label {
-  display: block;
   font-size: 0.875rem;
-  color: #64748b;
+  font-weight: 600;
+  color: #475569;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .stat-item .stat-value {
-  display: block;
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
   color: #1a1a2e;
 }
 

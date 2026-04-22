@@ -166,13 +166,14 @@ export const checkHealth = async () => {
  * @returns {Promise<Object>} Complete threat model with final paths, mitigations, scores
  * @throws {Error} With user-friendly message on failure
  */
-export const uploadAndRunSwarm = async (file, model = null, cancelToken = null) => {
+export const uploadAndRunSwarm = async (file, model = null, impactScore = 3, cancelToken = null) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
     if (model) {
       formData.append('model', model);
     }
+    formData.append('impact_score', impactScore);
 
     const response = await apiClient.post('/api/swarm/run', formData, {
       headers: {
@@ -195,13 +196,14 @@ export const uploadAndRunSwarm = async (file, model = null, cancelToken = null) 
  * @returns {Promise<Object>} Complete threat model with final paths, mitigations, scores
  * @throws {Error} With user-friendly message on failure
  */
-export const uploadAndRunQuick = async (file, model = null, cancelToken = null) => {
+export const uploadAndRunQuick = async (file, model = null, impactScore = 3, cancelToken = null) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
     if (model) {
       formData.append('model', model);
     }
+    formData.append('impact_score', impactScore);
 
     const response = await apiClient.post('/api/swarm/run/quick', formData, {
       headers: {
@@ -225,13 +227,14 @@ export const uploadAndRunQuick = async (file, model = null, cancelToken = null) 
  * @returns {Promise<Object>} Complete threat model with final paths, mitigations, scores
  * @throws {Error} With user-friendly message on failure
  */
-export const uploadAndRunSingleAgent = async (file, agentName, model = null, cancelToken = null) => {
+export const uploadAndRunSingleAgent = async (file, agentName, model = null, impactScore = 3, cancelToken = null) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
     if (model) {
       formData.append('model', model);
     }
+    formData.append('impact_score', impactScore);
 
     const response = await apiClient.post(`/api/swarm/run/single?agent_name=${agentName}`, formData, {
       headers: {
@@ -255,13 +258,14 @@ export const uploadAndRunSingleAgent = async (file, agentName, model = null, can
  * @returns {Promise<Object>} Stigmergic swarm results with attack paths, shared graph, emergent insights
  * @throws {Error} With user-friendly message on failure
  */
-export const uploadAndRunStigmergic = async (file, executionOrder = 'capability_ascending', model = null, cancelToken = null) => {
+export const uploadAndRunStigmergic = async (file, executionOrder = 'capability_ascending', model = null, impactScore = 3, cancelToken = null) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
     if (model) {
       formData.append('model', model);
     }
+    formData.append('impact_score', impactScore);
 
     const response = await apiClient.post(`/api/swarm/run/stigmergic?execution_order=${executionOrder}`, formData, {
       headers: {

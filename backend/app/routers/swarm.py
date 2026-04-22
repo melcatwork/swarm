@@ -32,6 +32,7 @@ from app.swarm.output_filter import (
     build_confirmed_findings_summary,
 )
 from app.swarm.consensus_aggregator import aggregate_consensus, get_high_consensus_techniques
+from app.swarm.csa_risk_scorer import score_all_paths
 # Note: Lazy import crews to avoid CrewAI/LiteLLM initialization at module load time
 # CrewAI will default to OpenAI if imported before environment is configured
 # from app.swarm.crews import (
@@ -1217,6 +1218,10 @@ class PipelineResponse(BaseModel):
         ...,
         description="Total time for complete pipeline",
     )
+    csa_risk_assessment: Dict[str, Any] | None = Field(
+        default=None,
+        description="CSA CII 5×5 risk matrix assessment with scored paths, risk distribution, and tolerance actions",
+    )
     error: str | None = Field(
         default=None,
         description="Error message if status is error",
@@ -1259,7 +1264,8 @@ class JobResultResponse(BaseModel):
 @router.post("/run", response_model=PipelineResponse)
 async def run_full_pipeline(
     file: UploadFile = File(...),
-    model: str = Form(None)
+    model: str = Form(None),
+    impact_score: int = Form(3)
 ):
     """
     Run the complete threat modeling pipeline on an IaC file.
@@ -1285,15 +1291,19 @@ async def run_full_pipeline(
     - MITRE ATT&CK mitigations from STIX data
     - AWS-specific contextual mitigations
 
+    **CSA CII Risk Assessment** - Each path scored with 5×5 risk matrix (Likelihood × Impact)
+
     **WARNING:** This endpoint is very slow (10+ minutes) as it runs all three layers
     sequentially with all enabled personas. Use /run/quick for faster testing.
 
     Args:
         file: IaC file upload (.tf, .yaml, .yml, or .json)
+        model: Optional LLM model override
+        impact_score: CSA CII impact classification (1=Negligible, 2=Minor, 3=Moderate, 4=Severe, 5=Very Severe). Default: 3
 
     Returns:
         PipelineResponse with complete threat model including validated paths,
-        scores, mitigations, and executive summary
+        scores, mitigations, CSA risk assessment, and executive summary
 
     Raises:
         HTTPException: 503 if LLM not configured, 413 if file too large,
@@ -1515,6 +1525,18 @@ async def run_full_pipeline(
         logger.info("Pipeline Phase 5: Mitigation Mapping")
         final_paths_with_mitigations = map_mitigations(filtered_final_paths)
 
+        # Phase 5.5: CSA CII Risk Assessment
+        logger.info(f"Pipeline Phase 5.5: CSA CII Risk Assessment (impact score: {impact_score})")
+        csa_assessment = score_all_paths(
+            paths=final_paths_with_mitigations,
+            impact_score=impact_score
+        )
+        final_paths_with_mitigations = csa_assessment.get('scored_paths', final_paths_with_mitigations)
+        logger.info(
+            f"CSA risk assessment complete: {csa_assessment.get('paths_scored', 0)} paths scored, "
+            f"highest band: {csa_assessment.get('highest_band', 'Unknown')}"
+        )
+
         # Get executive summary
         executive_summary = adversarial_result.get("executive_summary", "")
 
@@ -1573,6 +1595,7 @@ async def run_full_pipeline(
             final_paths=final_paths_with_mitigations,
             executive_summary=executive_summary,
             execution_time_seconds=round(execution_time, 2),
+            csa_risk_assessment=csa_assessment,
         )
 
         # Auto-save to archive
@@ -1631,7 +1654,8 @@ async def run_full_pipeline(
 @router.post("/run/quick", response_model=PipelineResponse)
 async def run_quick_pipeline(
     file: UploadFile = File(...),
-    model: str = Form(None)
+    model: str = Form(None),
+    impact_score: int = Form(3)
 ):
     """
     Run a 2 agents test version of the threat modeling pipeline with reduced agents.
@@ -1654,6 +1678,7 @@ async def run_quick_pipeline(
     Args:
         file: IaC file upload (.tf, .yaml, .yml, or .json)
         model: Optional LLM model name to use (e.g., "qwen3:14b", "gemma4:e4b")
+        impact_score: CSA CII impact classification (1=Negligible, 2=Minor, 3=Moderate, 4=Severe, 5=Very Severe). Default: 3
 
     Returns:
         PipelineResponse with threat model from 2 exploration agents
@@ -1858,6 +1883,18 @@ async def run_quick_pipeline(
         logger.info("2 agents test Phase 5: Mitigation Mapping")
         final_paths_with_mitigations = map_mitigations(filtered_final_paths)
 
+        # Phase 5.5: CSA CII Risk Assessment
+        logger.info(f"2 agents test Phase 5.5: CSA CII Risk Assessment (impact score: {impact_score})")
+        csa_assessment = score_all_paths(
+            paths=final_paths_with_mitigations,
+            impact_score=impact_score
+        )
+        final_paths_with_mitigations = csa_assessment.get('scored_paths', final_paths_with_mitigations)
+        logger.info(
+            f"CSA risk assessment complete: {csa_assessment.get('paths_scored', 0)} paths scored, "
+            f"highest band: {csa_assessment.get('highest_band', 'Unknown')}"
+        )
+
         executive_summary = adversarial_result.get("executive_summary", "")
 
         execution_time = time.time() - start_time
@@ -1914,6 +1951,7 @@ async def run_quick_pipeline(
             final_paths=final_paths_with_mitigations,
             executive_summary=executive_summary,
             execution_time_seconds=round(execution_time, 2),
+            csa_risk_assessment=csa_assessment,
         )
 
         # Auto-save to archive
@@ -1981,7 +2019,8 @@ async def run_quick_pipeline(
 async def run_single_agent_pipeline(
     file: UploadFile = File(...),
     agent_name: str = "apt29_cozy_bear",
-    model: str = Form(None)
+    model: str = Form(None),
+    impact_score: int = Form(3)
 ):
     """
     Run threat modeling pipeline with a single selected agent.
@@ -2000,6 +2039,8 @@ async def run_single_agent_pipeline(
     Args:
         file: IaC file upload (.tf, .yaml, .yml, or .json)
         agent_name: Name of the persona to use (default: apt29_cozy_bear)
+        model: Optional LLM model override
+        impact_score: CSA CII impact classification (1=Negligible, 2=Minor, 3=Moderate, 4=Severe, 5=Very Severe). Default: 3
 
     Returns:
         PipelineResponse with threat model from 1 exploration agent
@@ -2209,6 +2250,18 @@ async def run_single_agent_pipeline(
         logger.info("single agent run Phase 5: Mitigation Mapping")
         final_paths_with_mitigations = map_mitigations(filtered_final_paths)
 
+        # Phase 5.5: CSA CII Risk Assessment
+        logger.info(f"single agent run Phase 5.5: CSA CII Risk Assessment (impact score: {impact_score})")
+        csa_assessment = score_all_paths(
+            paths=final_paths_with_mitigations,
+            impact_score=impact_score
+        )
+        final_paths_with_mitigations = csa_assessment.get('scored_paths', final_paths_with_mitigations)
+        logger.info(
+            f"CSA risk assessment complete: {csa_assessment.get('paths_scored', 0)} paths scored, "
+            f"highest band: {csa_assessment.get('highest_band', 'Unknown')}"
+        )
+
         executive_summary = adversarial_result.get("executive_summary", "")
 
         execution_time = time.time() - start_time
@@ -2265,6 +2318,7 @@ async def run_single_agent_pipeline(
             final_paths=final_paths_with_mitigations,
             executive_summary=executive_summary,
             execution_time_seconds=round(execution_time, 2),
+            csa_risk_assessment=csa_assessment,
         )
 
         # Auto-save to archive
@@ -2917,6 +2971,10 @@ class StigmergicSwarmResponse(BaseModel):
         default_factory=dict,
         description="Summary of evaluation metrics across all paths"
     )
+    csa_risk_assessment: Dict[str, Any] | None = Field(
+        default=None,
+        description="CSA CII 5×5 risk matrix assessment with scored paths, risk distribution, and tolerance actions",
+    )
     status: str = Field(default="ok", description="Status: ok or error")
     execution_time_seconds: float = Field(..., description="Total execution time")
     error: str | None = Field(default=None, description="Error message if status is error")
@@ -2927,7 +2985,8 @@ async def run_stigmergic_swarm_pipeline(
     file: UploadFile = File(...),
     execution_order: str = "capability_ascending",
     persona_limit: int | None = None,
-    model: str = Form(None)
+    model: str = Form(None),
+    impact_score: int = Form(3)
 ):
     """
     Run Phase 10: Stigmergic Swarm Exploration with sequential agent coordination.
@@ -2960,6 +3019,7 @@ async def run_stigmergic_swarm_pipeline(
         execution_order: Persona ordering strategy (default: capability_ascending)
         persona_limit: Optional limit on number of personas to execute (default: all)
         model: Optional model override for this run
+        impact_score: CSA CII impact classification (1=Negligible, 2=Minor, 3=Moderate, 4=Severe, 5=Very Severe). Default: 3
 
     Returns:
         StigmergicSwarmResponse with attack paths, shared graph, emergent insights
@@ -3130,6 +3190,18 @@ async def run_stigmergic_swarm_pipeline(
         logger.info("Phase 4: Mitigation Mapping")
         final_paths_with_mitigations = map_mitigations(filtered_paths)
 
+        # Phase 4.5: CSA CII Risk Assessment
+        logger.info(f"Phase 4.5: CSA CII Risk Assessment (impact score: {impact_score})")
+        csa_assessment = score_all_paths(
+            paths=final_paths_with_mitigations,
+            impact_score=impact_score
+        )
+        final_paths_with_mitigations = csa_assessment.get('scored_paths', final_paths_with_mitigations)
+        logger.info(
+            f"CSA risk assessment complete: {csa_assessment.get('paths_scored', 0)} paths scored, "
+            f"highest band: {csa_assessment.get('highest_band', 'Unknown')}"
+        )
+
         execution_time = time.time() - start_time
 
         personas_executed = execution_summary.get("personas_executed", [])
@@ -3188,6 +3260,7 @@ async def run_stigmergic_swarm_pipeline(
             vulnerability_intelligence=vuln_intel_response,
             confirmed_findings=confirmed_findings,
             evaluation_summary=evaluation_summary,
+            csa_risk_assessment=csa_assessment,
             status="ok",
             execution_time_seconds=round(execution_time, 2)
         )

@@ -8,3 +8,6 @@ dist
 # Development logs
 logs/
 *.pid
+
+# Runtime data - archived threat model runs
+backend/data/archived_runs/*.json
