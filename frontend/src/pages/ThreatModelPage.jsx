@@ -545,28 +545,8 @@ function ThreatModelPage() {
     setPostMitigationAnalysis(null);
     setViewMode('pre');
   };
-
-  // Helper: Convert residual_risk_score (0-10) to risk_level (0-25) and risk_band
-  const convertResidualScoreToCSA = (residualScore, originalImpactScore = 5) => {
-    // residualScore is 0-10 scale (similar to likelihood * impact / 5)
-    // Convert back to 5x5 matrix format
-    // Assume likelihood reduced proportionally, impact stays same (data classification)
-    const residualLikelihood = Math.ceil((residualScore * 5) / originalImpactScore)
-    const residualRiskLevel = Math.min(Math.max(residualLikelihood * originalImpactScore, 0), 25)
-
-    // Map risk_level to risk_band (CSA CII 5x5 matrix)
-    let riskBand
-    if (residualRiskLevel >= 20) riskBand = 'Very High'
-    else if (residualRiskLevel >= 15) riskBand = 'High'
-    else if (residualRiskLevel >= 10) riskBand = 'Medium-High'
-    else if (residualRiskLevel >= 5) riskBand = 'Medium'
-    else riskBand = 'Low'
-
-    return { residualRiskLevel, riskBand, residualLikelihood }
-  }
-
   // Helper: Calculate residual risk distribution from post-mitigation paths
-  const calculateResidualRiskDistribution = (postMitigationPaths, originalImpactScore = 5) => {
+  const calculateResidualRiskDistribution = (postMitigationPaths) => {
     const distribution = {
       'Very High': 0,
       'High': 0,
@@ -579,7 +559,8 @@ function ThreatModelPage() {
     const bandPriority = { 'Very High': 5, 'High': 4, 'Medium-High': 3, 'Medium': 2, 'Low': 1 }
 
     postMitigationPaths.forEach(path => {
-      const { riskBand } = convertResidualScoreToCSA(path.residual_risk_score, originalImpactScore)
+      // Use residual CSA risk score directly from backend (already calculated correctly)
+      const riskBand = path.residual_csa_risk_score?.risk_band || 'Low'
       distribution[riskBand] += 1
 
       if (bandPriority[riskBand] > bandPriority[highestBand]) {
@@ -628,16 +609,8 @@ function ThreatModelPage() {
       const data = await analyzePostMitigation(result.final_paths, mitigationSelections);
 
       if (data.status === 'ok') {
-        // Get original impact score from CSA risk assessment
-        const originalImpactScore = result.csa_risk_assessment?.impact_configuration?.user_set_score || 5
-
-        // Enrich post-mitigation paths with CSA-style risk bands
+        // Enrich post-mitigation paths by merging with original path data
         const enrichedPaths = data.post_mitigation_paths.map(pmPath => {
-          const { residualRiskLevel, riskBand, residualLikelihood } = convertResidualScoreToCSA(
-            pmPath.residual_risk_score,
-            originalImpactScore
-          )
-
           // Find original path to merge data
           const originalPath = (result.csa_risk_assessment?.scored_paths || result.final_paths || [])
             .find(p => (p.path_id || p.id || p.name) === pmPath.path_id)
@@ -645,23 +618,13 @@ function ThreatModelPage() {
           return {
             ...originalPath,
             ...pmPath,
-            residual_csa_risk_score: {
-              risk_level: residualRiskLevel,
-              risk_band: riskBand,
-              likelihood: {
-                score: residualLikelihood,
-                label: residualLikelihood >= 5 ? 'Very Likely' : residualLikelihood >= 4 ? 'Likely' : residualLikelihood >= 3 ? 'Possible' : residualLikelihood >= 2 ? 'Unlikely' : 'Very Unlikely'
-              },
-              impact: originalPath?.csa_risk_score?.impact || { score: originalImpactScore }
-            }
+            // Use CSA residual risk score directly from backend (already calculated correctly)
+            residual_csa_risk_score: pmPath.residual_csa_risk_score || null
           }
         })
 
-        // Calculate residual risk distribution
-        const { distribution, highestBand } = calculateResidualRiskDistribution(
-          data.post_mitigation_paths,
-          originalImpactScore
-        )
+        // Calculate residual risk distribution from backend's CSA scores
+        const { distribution, highestBand } = calculateResidualRiskDistribution(enrichedPaths)
 
         // Create enriched analysis object
         const enrichedAnalysis = {
@@ -769,16 +732,8 @@ function ThreatModelPage() {
       const data = await analyzePostMitigation(result.final_paths, mitigationSelections);
 
       if (data.status === 'ok') {
-        // Get original impact score from CSA risk assessment
-        const originalImpactScore = result.csa_risk_assessment?.impact_configuration?.user_set_score || 5
-
-        // Enrich post-mitigation paths with CSA-style risk bands
+        // Enrich post-mitigation paths by merging with original path data
         const enrichedPaths = data.post_mitigation_paths.map(pmPath => {
-          const { residualRiskLevel, riskBand, residualLikelihood } = convertResidualScoreToCSA(
-            pmPath.residual_risk_score,
-            originalImpactScore
-          )
-
           // Find original path to merge data
           const originalPath = (result.csa_risk_assessment?.scored_paths || result.final_paths || [])
             .find(p => (p.path_id || p.id || p.name) === pmPath.path_id)
@@ -786,23 +741,13 @@ function ThreatModelPage() {
           return {
             ...originalPath,
             ...pmPath,
-            residual_csa_risk_score: {
-              risk_level: residualRiskLevel,
-              risk_band: riskBand,
-              likelihood: {
-                score: residualLikelihood,
-                label: residualLikelihood >= 5 ? 'Very Likely' : residualLikelihood >= 4 ? 'Likely' : residualLikelihood >= 3 ? 'Possible' : residualLikelihood >= 2 ? 'Unlikely' : 'Very Unlikely'
-              },
-              impact: originalPath?.csa_risk_score?.impact || { score: originalImpactScore }
-            }
+            // Use CSA residual risk score directly from backend (already calculated correctly)
+            residual_csa_risk_score: pmPath.residual_csa_risk_score || null
           }
         })
 
-        // Calculate residual risk distribution
-        const { distribution, highestBand } = calculateResidualRiskDistribution(
-          data.post_mitigation_paths,
-          originalImpactScore
-        )
+        // Calculate residual risk distribution from backend's CSA scores
+        const { distribution, highestBand } = calculateResidualRiskDistribution(enrichedPaths)
 
         // Create enriched analysis object
         const enrichedAnalysis = {

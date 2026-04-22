@@ -114,6 +114,10 @@ class PostMitigationPath(BaseModel):
     step_impacts: List[StepImpact] = Field(..., description="Impact on each step")
     path_status: str = Field(..., description="neutralized/significantly_reduced/partially_mitigated/still_viable")
     residual_risk_score: float = Field(..., ge=0, le=10, description="Risk score after mitigations (0-10)")
+    residual_csa_risk_score: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="CSA CII residual risk assessment with likelihood, impact, risk_level, risk_band"
+    )
 
 
 class ResidualRisk(BaseModel):

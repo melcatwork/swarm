@@ -535,6 +535,54 @@ def analyze_post_mitigation_impact(
         residual_risk_score = original_score * (1 - total_reduction)
         residual_scores.append(residual_risk_score)
 
+        # Calculate CSA-based residual risk (mitigations reduce LIKELIHOOD, not IMPACT)
+        residual_csa_risk_score = None
+        csa_score = path.get("csa_risk_score")
+        if csa_score:
+            # Get original CSA likelihood and impact
+            original_likelihood = csa_score.get("likelihood", {}).get("score", 3)
+            original_impact = csa_score.get("impact", {}).get("score", 5)
+            original_risk_band = csa_score.get("risk_band", "Medium")
+
+            # Reduce likelihood based on mitigation effectiveness
+            # Mitigations affect likelihood (how easy to attack), NOT impact (data classification)
+            residual_likelihood_float = original_likelihood * (1 - total_reduction)
+            residual_likelihood = max(1, min(5, round(residual_likelihood_float)))
+
+            # Calculate residual risk level
+            residual_risk_level = residual_likelihood * original_impact
+
+            # Map risk_level to risk_band (CSA CII 5x5 matrix)
+            if residual_risk_level >= 20:
+                residual_risk_band = 'Very High'
+            elif residual_risk_level >= 15:
+                residual_risk_band = 'High'
+            elif residual_risk_level >= 10:
+                residual_risk_band = 'Medium-High'
+            elif residual_risk_level >= 5:
+                residual_risk_band = 'Medium'
+            else:
+                residual_risk_band = 'Low'
+
+            residual_csa_risk_score = {
+                'likelihood': {
+                    'score': residual_likelihood,
+                    'label': {1: 'Very Low', 2: 'Low', 3: 'Moderate', 4: 'High', 5: 'Very High'}[residual_likelihood],
+                },
+                'impact': {
+                    'score': original_impact,
+                    'label': csa_score.get("impact", {}).get("label", "Very Severe"),
+                },
+                'risk_level': residual_risk_level,
+                'risk_band': residual_risk_band,
+            }
+
+            logger.debug(
+                f"Path {path_id}: CSA risk reduced from {original_risk_band} "
+                f"({original_likelihood}×{original_impact}={csa_score.get('risk_level')}) "
+                f"to {residual_risk_band} ({residual_likelihood}×{original_impact}={residual_risk_level})"
+            )
+
         # Adjust difficulty
         if path_status == "neutralized":
             post_mitigation_difficulty = "neutralized"
@@ -563,6 +611,7 @@ def analyze_post_mitigation_impact(
                 step_impacts=step_impacts,
                 path_status=path_status,
                 residual_risk_score=round(residual_risk_score, 2),
+                residual_csa_risk_score=residual_csa_risk_score,
             )
         )
 
