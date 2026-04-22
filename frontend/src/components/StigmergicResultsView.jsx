@@ -696,21 +696,57 @@ const StigmergicResultsView = ({ results }) => {
 
         {expandedSections.paths && (
           <div className="paths-container">
-            {/* Attack Paths with CSA Risk Scoring */}
+            {/* Separate confirmed vuln paths from agent exploration paths */}
             {(() => {
               const paths = results.csa_risk_assessment?.scored_paths || attack_paths || []
-              const sorted = [...paths].sort((a, b) => {
+
+              // Separate paths by source
+              const confirmedVulnPaths = paths.filter(p => p.source === 'confirmed_vuln_synthesis')
+              const agentExplorationPaths = paths.filter(p => p.source !== 'confirmed_vuln_synthesis')
+
+              // Sort confirmed vuln paths by risk level
+              const sortedConfirmed = [...confirmedVulnPaths].sort((a, b) => {
                 const scoreA = a.csa_risk_score?.risk_level ?? 0
                 const scoreB = b.csa_risk_score?.risk_level ?? 0
                 return scoreB - scoreA
               })
-              return sorted.map((path, i) => (
-                <CsaPathCard
-                  key={path.path_id || path.id || i}
-                  path={path}
-                  defaultExpanded={i === 0}
-                />
-              ))
+
+              // Sort agent exploration paths by risk level
+              const sortedAgent = [...agentExplorationPaths].sort((a, b) => {
+                const scoreA = a.csa_risk_score?.risk_level ?? 0
+                const scoreB = b.csa_risk_score?.risk_level ?? 0
+                return scoreB - scoreA
+              })
+
+              return (
+                <>
+                  {/* Confirmed Vulnerability-Grounded Paths */}
+                  {sortedConfirmed.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <h4 style={{
+                        fontSize: 16,
+                        fontWeight: 600,
+                        marginBottom: 12,
+                        color: 'var(--color-text-primary)'
+                      }}>
+                        Confirmed Vulnerability-Grounded Paths ({sortedConfirmed.length})
+                      </h4>
+                      {sortedConfirmed.map((path, i) => (
+                        <CsaPathCard
+                          key={path.path_id || path.id || `confirmed-${i}`}
+                          path={path}
+                          defaultExpanded={i === 0}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Agent Explorations - Collapsed by Default */}
+                  {sortedAgent.length > 0 && (
+                    <AgentExplorationsSection paths={sortedAgent} />
+                  )}
+                </>
+              )
             })()}
           </div>
         )}
@@ -855,5 +891,72 @@ const StigmergicResultsView = ({ results }) => {
     </div>
   );
 };
+
+// Agent Explorations Collapsible Section Component
+function AgentExplorationsSection({ paths }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div style={{
+      border: '1px solid var(--color-border-secondary)',
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginBottom: 12
+    }}>
+      {/* Header - Clickable to Expand/Collapse */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          width: '100%',
+          padding: '12px 16px',
+          backgroundColor: 'var(--color-background-secondary)',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: 14,
+          fontWeight: 600,
+          color: 'var(--color-text-primary)',
+          transition: 'background-color 0.2s'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--color-background-tertiary)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--color-background-secondary)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Network size={16} style={{ color: 'var(--color-text-secondary)' }} />
+          <span>Agent Explorations - {paths.length} path{paths.length !== 1 ? 's' : ''}</span>
+        </div>
+        {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+      </button>
+
+      {/* Collapsed Content - Paths */}
+      {expanded && (
+        <div style={{ padding: '12px 16px' }}>
+          <p style={{
+            fontSize: 12,
+            color: 'var(--color-text-secondary)',
+            marginBottom: 12,
+            lineHeight: 1.5
+          }}>
+            These attack paths were discovered by threat actor persona agents during exploration.
+            They represent creative attack scenarios based on infrastructure analysis and agent expertise.
+          </p>
+          {paths.map((path, i) => (
+            <CsaPathCard
+              key={path.path_id || path.id || `agent-${i}`}
+              path={path}
+              defaultExpanded={false}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default StigmergicResultsView;
