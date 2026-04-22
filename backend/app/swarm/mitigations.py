@@ -639,7 +639,8 @@ def _evaluate_mitigation_effectiveness(
         effectiveness: "high", "medium", "low"
         status: "blocked", "reduced", "active"
     """
-    # Check if applied mitigation IDs match the step's mitigation
+    # Check if applied mitigation IDs or NAMEs match the step's mitigation
+    mitigation_name = mitigation.get("mitigation_name", "")
     mitigation_id = mitigation.get("mitigation_id", "")
 
     # High effectiveness techniques - these are strongly blocked by their mitigations
@@ -671,7 +672,7 @@ def _evaluate_mitigation_effectiveness(
         "T1105": "Egress controls make file transfer harder but not impossible",
     }
 
-    if mitigation_id in applied_mitigations:
+    if mitigation_name in applied_mitigations or mitigation_id in applied_mitigations:
         # The recommended mitigation for this step was selected
         if technique_id in high_effectiveness_techniques:
             return (
