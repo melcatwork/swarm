@@ -836,6 +836,11 @@ const StigmergicResultsView = ({ results }) => {
         </div>
       )}
 
+      {renderExecutionTimeline()}
+      {renderEmergentInsights()}
+      {renderSharedGraph()}
+      {renderAttackPaths()}
+
       {/* Comprehensive Mitigation Summary */}
       {attack_paths.length > 0 && (
         <div className="stigmergic-section">
@@ -845,11 +850,6 @@ const StigmergicResultsView = ({ results }) => {
           />
         </div>
       )}
-
-      {renderExecutionTimeline()}
-      {renderEmergentInsights()}
-      {renderSharedGraph()}
-      {renderAttackPaths()}
 
       {/* Mitigation Action Bar */}
       {attack_paths.length > 0 && (

@@ -1215,12 +1215,6 @@ function ThreatModelPage() {
             />
           )}
 
-          {/* Comprehensive Mitigation Summary */}
-          {(() => {
-            const paths = result.csa_risk_assessment?.scored_paths || result.final_paths || []
-            return <MitigationSummary paths={paths} title="Comprehensive Mitigation Summary - All Attack Paths" />
-          })()}
-
           {/* Attack Path Cards */}
           <div className="attack-paths-list">
             <h3>Attack Paths ({result.final_paths.length})</h3>
@@ -1304,6 +1298,12 @@ function ThreatModelPage() {
               </div>
             </div>
           </div>
+
+          {/* Comprehensive Mitigation Summary */}
+          {(() => {
+            const paths = result.csa_risk_assessment?.scored_paths || result.final_paths || []
+            return <MitigationSummary paths={paths} title="Comprehensive Mitigation Summary - All Attack Paths" />
+          })()}
         </div>
       )}
 
