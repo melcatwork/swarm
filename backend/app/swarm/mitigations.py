@@ -469,16 +469,34 @@ def analyze_post_mitigation_impact(
         reduced_count = 0
         active_count = 0
 
+        # Track reduction percentage for each step
+        step_reduction_percentages = []
+
         for step in steps:
             step_number = step.get("step_number", 0)
             technique_id = step.get("technique_id", "")
             mitigation = step.get("mitigation", {})
 
+            # Count total recommended mitigations for this step
+            # Check all_mitigations first, then mitigations_by_layer, fallback to 1 if only primary mitigation
+            all_mitigations = step.get("all_mitigations", [])
+            mitigations_by_layer = step.get("mitigations_by_layer", {})
+
+            if all_mitigations:
+                total_recommended = len(all_mitigations)
+            elif mitigations_by_layer:
+                # Count mitigations across all layers (preventive, detective, corrective, administrative)
+                total_recommended = sum(len(mits) for mits in mitigations_by_layer.values())
+            else:
+                # Fallback: only primary mitigation available
+                total_recommended = 1 if mitigation else 0
+
             # Check if this step has selected mitigations
             key = f"{path_id}:{step_number}"
             applied_mitigations = selected_map.get(key, [])
+            selected_count = len(applied_mitigations)
 
-            if not applied_mitigations:
+            if not applied_mitigations or total_recommended == 0:
                 # No mitigations applied to this step - remains active
                 step_impacts.append(
                     StepImpact(
@@ -491,10 +509,12 @@ def analyze_post_mitigation_impact(
                     )
                 )
                 active_count += 1
+                step_reduction_percentages.append(0.0)  # 0% reduction
             else:
-                # Mitigations applied - determine effectiveness
-                effectiveness, status, reasoning = _evaluate_mitigation_effectiveness(
-                    technique_id, mitigation, applied_mitigations, step
+                # Mitigations applied - determine effectiveness with completeness
+                effectiveness, status, reasoning, reduction_pct = _evaluate_mitigation_effectiveness(
+                    technique_id, mitigation, applied_mitigations, step,
+                    selected_count, total_recommended
                 )
 
                 step_impacts.append(
@@ -507,6 +527,8 @@ def analyze_post_mitigation_impact(
                         applied_mitigations=applied_mitigations,
                     )
                 )
+
+                step_reduction_percentages.append(reduction_pct)
 
                 if status == "blocked":
                     blocked_count += 1
@@ -526,11 +548,20 @@ def analyze_post_mitigation_impact(
         else:
             path_status = "still_viable"
 
-        # Calculate residual risk score
-        # Original score reduced proportionally by blocked/reduced steps
-        blocked_reduction = (blocked_count / total_steps) * 1.0  # 100% reduction per blocked step
-        reduced_reduction = (reduced_count / total_steps) * 0.5  # 50% reduction per reduced step
-        total_reduction = min(blocked_reduction + reduced_reduction, 0.95)  # Cap at 95%
+        # Calculate residual risk score based on average step reduction
+        # This ensures: full mitigation selection → higher reduction → lower residual risk
+        # than partial mitigation selection
+        if step_reduction_percentages:
+            total_reduction = sum(step_reduction_percentages) / len(step_reduction_percentages)
+            total_reduction = min(total_reduction, 0.95)  # Cap at 95%
+        else:
+            total_reduction = 0.0
+
+        logger.info(
+            f"Path '{path_name}': {len(step_reduction_percentages)} steps analyzed, "
+            f"average reduction: {total_reduction*100:.1f}% "
+            f"(blocked: {blocked_count}, reduced: {reduced_count}, active: {active_count})"
+        )
 
         residual_risk_score = original_score * (1 - total_reduction)
         residual_scores.append(residual_risk_score)
@@ -709,15 +740,32 @@ def _evaluate_mitigation_effectiveness(
     mitigation: Dict,
     applied_mitigations: List[str],
     step: Dict,
-) -> tuple[str, str, str]:
+    selected_count: int,
+    total_recommended: int,
+) -> tuple[str, str, str, float]:
     """
     Evaluate how effective applied mitigations are against a specific attack step.
 
+    Effectiveness is scaled by completeness: selecting all recommended mitigations
+    produces higher reduction than selecting only some.
+
+    Args:
+        technique_id: MITRE ATT&CK technique ID
+        mitigation: Primary mitigation dictionary
+        applied_mitigations: List of selected mitigation IDs/names
+        step: Full step dictionary
+        selected_count: Number of mitigations selected for this step
+        total_recommended: Total mitigations recommended for this step
+
     Returns:
-        Tuple of (effectiveness: str, status: str, reasoning: str)
-        effectiveness: "high", "medium", "low"
+        Tuple of (effectiveness: str, status: str, reasoning: str, reduction_pct: float)
+        effectiveness: "high", "medium", "low", "none"
         status: "blocked", "reduced", "active"
+        reduction_pct: 0.0 to 1.0 (percentage reduction for this step)
     """
+    # Calculate completeness ratio
+    completeness = selected_count / total_recommended if total_recommended > 0 else 0.0
+
     # Check if applied mitigation IDs or NAMEs match the step's mitigation
     mitigation_name = mitigation.get("mitigation_name", "")
     mitigation_id = mitigation.get("mitigation_id", "")
@@ -753,27 +801,87 @@ def _evaluate_mitigation_effectiveness(
 
     if mitigation_name in applied_mitigations or mitigation_id in applied_mitigations:
         # The recommended mitigation for this step was selected
+        # Scale effectiveness by completeness ratio
         if technique_id in high_effectiveness_techniques:
-            return (
-                "high",
-                "blocked",
-                high_effectiveness_techniques[technique_id],
-            )
+            # HIGH effectiveness techniques - scale from 15% to 100% based on completeness
+            if completeness >= 1.0:
+                reduction_pct = 1.00  # 100% - all mitigations selected, fully blocked
+                status = "blocked"
+                effectiveness = "high"
+            elif completeness >= 0.80:
+                reduction_pct = 0.85  # 85% - most mitigations, mostly blocked
+                status = "blocked"
+                effectiveness = "high"
+            elif completeness >= 0.60:
+                reduction_pct = 0.70  # 70% - majority, significantly reduced
+                status = "reduced"
+                effectiveness = "high"
+            elif completeness >= 0.40:
+                reduction_pct = 0.50  # 50% - half selected, reduced
+                status = "reduced"
+                effectiveness = "medium"
+            elif completeness >= 0.20:
+                reduction_pct = 0.30  # 30% - some selected, minimally reduced
+                status = "reduced"
+                effectiveness = "low"
+            else:
+                reduction_pct = 0.15  # 15% - very few selected, slightly reduced
+                status = "reduced"
+                effectiveness = "low"
+
+            reasoning = f"{high_effectiveness_techniques[technique_id]} (Completeness: {completeness*100:.0f}% - {selected_count}/{total_recommended} mitigations)"
+            return (effectiveness, status, reasoning, reduction_pct)
+
         elif technique_id in medium_effectiveness_techniques:
-            return (
-                "medium",
-                "reduced",
-                medium_effectiveness_techniques[technique_id],
-            )
+            # MEDIUM effectiveness techniques - scale from 6% to 50% based on completeness
+            if completeness >= 1.0:
+                reduction_pct = 0.50  # 50% - all selected, reduced
+                effectiveness = "medium"
+            elif completeness >= 0.80:
+                reduction_pct = 0.40  # 40% - most selected, reduced
+                effectiveness = "medium"
+            elif completeness >= 0.60:
+                reduction_pct = 0.30  # 30% - majority, reduced
+                effectiveness = "medium"
+            elif completeness >= 0.40:
+                reduction_pct = 0.20  # 20% - half, minimally reduced
+                effectiveness = "low"
+            elif completeness >= 0.20:
+                reduction_pct = 0.12  # 12% - some, slightly reduced
+                effectiveness = "low"
+            else:
+                reduction_pct = 0.06  # 6% - very few, slightly reduced
+                effectiveness = "low"
+
+            reasoning = f"{medium_effectiveness_techniques[technique_id]} (Completeness: {completeness*100:.0f}% - {selected_count}/{total_recommended} mitigations)"
+            return (effectiveness, "reduced", reasoning, reduction_pct)
+
         else:
-            # Generic mitigation effectiveness
-            return (
-                "medium",
-                "reduced",
-                f"Mitigation {mitigation_id} reduces effectiveness of {technique_id} but doesn't fully block it",
-            )
+            # Generic mitigation effectiveness - scale from 3% to 25% based on completeness
+            if completeness >= 1.0:
+                reduction_pct = 0.25
+                effectiveness = "low"
+            elif completeness >= 0.80:
+                reduction_pct = 0.20
+                effectiveness = "low"
+            elif completeness >= 0.60:
+                reduction_pct = 0.15
+                effectiveness = "low"
+            elif completeness >= 0.40:
+                reduction_pct = 0.10
+                effectiveness = "low"
+            elif completeness >= 0.20:
+                reduction_pct = 0.06
+                effectiveness = "low"
+            else:
+                reduction_pct = 0.03
+                effectiveness = "low"
+
+            reasoning = f"Mitigation {mitigation_id} reduces effectiveness of {technique_id} (Completeness: {completeness*100:.0f}% - {selected_count}/{total_recommended} mitigations)"
+            return (effectiveness, "reduced", reasoning, reduction_pct)
     else:
         # Different mitigation was selected - assess based on AWS contextual knowledge
+        # Apply low effectiveness with completeness scaling
         aws_mitigation = AWS_CONTEXTUAL_MITIGATIONS.get(technique_id)
         if aws_mitigation:
             # Check if any applied mitigation relates to AWS service
@@ -783,18 +891,15 @@ def _evaluate_mitigation_effectiveness(
             # If the mitigation mentions key AWS services for this technique, it has some effect
             if any(keyword in mitigation_name.lower() + aws_action.lower()
                    for keyword in ["iam", "mfa", "cloudtrail", "guardduty", "waf", "s3", "vpc"]):
-                return (
-                    "low",
-                    "reduced",
-                    f"Applied mitigation provides some defense-in-depth against {technique_id}",
-                )
+                # Scale from 2% to 15% based on completeness
+                reduction_pct = 0.02 + (completeness * 0.13)  # 2% to 15%
+                reasoning = f"Applied mitigation provides some defense-in-depth against {technique_id} (Completeness: {completeness*100:.0f}%)"
+                return ("low", "reduced", reasoning, reduction_pct)
 
-        # Fallback - mitigation provides minimal protection
-        return (
-            "low",
-            "reduced",
-            f"Applied mitigation provides limited protection against {technique_id}",
-        )
+        # Fallback - mitigation provides minimal protection (1% to 8% based on completeness)
+        reduction_pct = 0.01 + (completeness * 0.07)
+        reasoning = f"Applied mitigation provides limited protection against {technique_id} (Completeness: {completeness*100:.0f}%)"
+        return ("low", "reduced", reasoning, reduction_pct)
 
 
 def _generate_residual_risk_recommendations(

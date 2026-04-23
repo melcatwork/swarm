@@ -4,7 +4,75 @@ AI-powered threat modeling platform using CrewAI multi-agent swarm intelligence 
 
 **Repository**: https://github.com/redcountryroad/swarm-tm (private)
 **Status**: Production Ready ✅
-**Last Updated**: 2026-04-15
+**Last Updated**: 2026-04-23
+
+## Recent Changes (2026-04-23)
+
+### ✅ Threat Model Summary Component
+- **Added high-level summary section for all 4 run types**
+- Appears between "Upload Infrastructure-as-Code" and "Infrastructure Asset Graph"
+- Displays comprehensive overview at a glance:
+  - Total number of discovered attack paths
+  - Primary & alternate attack paths count with highest risk band
+  - Overall highest risk level across all paths
+  - Attack surface coverage percentage (for stigmergic swarm)
+  - Risk distribution for primary/alternate paths (vulnerability-grounded)
+  - Risk distribution for all attack paths
+  - Data classification impact configuration
+- **Frontend changes**:
+  - `frontend/src/components/ThreatModelSummary.jsx` — New summary component with responsive grid layout (NEW FILE)
+  - `frontend/src/pages/ThreatModelPage.jsx` — Added ThreatModelSummary import and rendering (lines 1275-1278)
+- **Visual design**:
+  - Purple gradient background with 2px border
+  - 4-stat responsive grid (Total Paths, Primary/Alternate, Overall Risk, Coverage)
+  - Color-coded stat cards based on risk bands
+  - Two risk distribution sections with pill-style badges
+  - Impact configuration banner at bottom
+- **Benefits**:
+  - ✅ Instant visibility of critical metrics without scrolling
+  - ✅ Focused priority on CVE-based vulnerability paths
+  - ✅ Visual hierarchy draws attention to high-risk areas
+  - ✅ Coverage validation for stigmergic swarm runs
+  - ✅ Context before diving into detailed attack paths
+- **Data filtering**:
+  - Primary & alternate paths: `source === 'confirmed_vuln_synthesis'`
+  - Agent exploration paths: `source !== 'confirmed_vuln_synthesis'`
+  - Risk calculations based on CSA CII 5×5 risk matrix
+- See: `THREAT_MODEL_SUMMARY_COMPONENT.md`
+
+### ✅ Mitigation Action Toolbar Placement
+- **Added mitigation toolbar between Attack Paths and Comprehensive Mitigation Summary**
+- Provides early action opportunity after reviewing attack path cards
+- Same 3-button design: Clear Selections, Apply All Mitigations & Analyze, Apply Mitigations & Analyze
+- Purple gradient background matching existing toolbar in MitigationSummary
+- Users can now take action at two points: after attack paths OR after comprehensive summary
+- See: `MITIGATION_TOOLBAR_PRE_MITIGATION_PLACEMENT.md`
+
+### ✅ Completeness-Based Mitigation Reduction Logic
+- **Implemented granular mitigation effectiveness based on selection completeness**
+- System now differentiates between full and partial mitigation selection
+- Selecting ALL preventive mitigations results in lower residual likelihood than selecting SOME
+- **Backend changes**:
+  - `backend/app/swarm/mitigations.py` — Updated `analyze_post_mitigation_impact()` to calculate per-step completeness ratios
+  - `backend/app/swarm/mitigations.py` — Enhanced `_evaluate_mitigation_effectiveness()` to scale reduction by completeness (15%-100% for HIGH, 6%-50% for MEDIUM techniques)
+  - Added `selected_count` and `total_recommended` parameters to effectiveness evaluator
+  - Changed path-level reduction from binary blocked/reduced to average of step reduction percentages
+- **Completeness scaling**:
+  - **HIGH effectiveness techniques** (T1552.005, T1078, T1530, etc.): 100% completeness → 100% reduction (blocked), 67% completeness → 70% reduction (reduced), 33% completeness → 30% reduction (minimally reduced)
+  - **MEDIUM effectiveness techniques** (T1098, T1486, T1496, etc.): 100% completeness → 50% reduction, 50% completeness → 20% reduction
+  - **GENERIC techniques**: 100% completeness → 25% reduction, scale down to 3% for partial selection
+- **Path-level calculation**: Average of all step reductions → ensures full mitigation selection produces lower residual likelihood than partial
+- **Example impact**:
+  - All mitigations (100% complete): 4 steps → 95% avg reduction → Likelihood 4 → 1, Risk 20 → 5 (75% reduction)
+  - Half mitigations (50% complete): 4 steps → 57% avg reduction → Likelihood 4 → 2, Risk 20 → 10 (50% reduction)
+  - Minimal mitigations (20% complete): 4 steps → 20% avg reduction → Likelihood 4 → 3, Risk 20 → 15 (25% reduction)
+- **Benefits**:
+  - ✅ Incentivizes complete mitigation implementation
+  - ✅ Realistic risk modeling: partial mitigation = partial protection
+  - ✅ Granular control over risk reduction
+  - ✅ Transparent completeness display in reasoning field
+- **Applies to**: All 4 run types (Full Swarm, Quick Run, Single Agent, Stigmergic Swarm)
+- See: `COMPLETENESS_BASED_MITIGATION_LOGIC.md`
 
 ## Recent Changes (2026-04-15)
 

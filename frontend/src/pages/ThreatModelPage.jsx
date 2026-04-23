@@ -4,6 +4,7 @@ import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, Check
 import Toast from '../components/Toast';
 import StigmergicResultsView from '../components/StigmergicResultsView';
 import ImpactSelector from '../components/ImpactSelector';
+import ThreatModelSummary from '../components/ThreatModelSummary';
 import CsaRiskSummary from '../components/CsaRiskSummary';
 import ResidualRiskSummary from '../components/ResidualRiskSummary';
 import CsaPathCard from '../components/CsaPathCard';
@@ -1271,6 +1272,11 @@ function ThreatModelPage() {
         )}
       </div>
 
+      {/* Threat Model Summary - High Level Overview */}
+      {result && (
+        <ThreatModelSummary result={result} />
+      )}
+
       {/* Section B: Asset Graph View */}
       {result && result.asset_graph && (
         <div className="asset-graph-panel">
@@ -1456,6 +1462,123 @@ function ThreatModelPage() {
                 </>
               )
             })()}
+          </div>
+
+          {/* Mitigation Action Toolbar - Bottom of Attack Paths */}
+          <div
+            style={{
+              backgroundColor: 'var(--color-primary)',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              padding: '16px 20px',
+              borderRadius: 8,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: 24,
+              marginBottom: 24,
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span
+                style={{
+                  color: '#fff',
+                  fontSize: 15,
+                  fontWeight: 600,
+                }}
+              >
+                {Object.values(selectedMitigations).filter(Boolean).length} mitigation(s) selected
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={clearAllMitigations}
+                disabled={Object.values(selectedMitigations).filter(Boolean).length === 0}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 6,
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: Object.values(selectedMitigations).filter(Boolean).length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: Object.values(selectedMitigations).filter(Boolean).length === 0 ? 0.5 : 1,
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  if (Object.values(selectedMitigations).filter(Boolean).length > 0) {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.25)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'
+                }}
+              >
+                Clear Selections
+              </button>
+              <button
+                onClick={applyAllMitigations}
+                disabled={analyzingMitigations}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 6,
+                  border: 'none',
+                  backgroundColor: '#10b981',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: analyzingMitigations ? 'not-allowed' : 'pointer',
+                  opacity: analyzingMitigations ? 0.5 : 1,
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!analyzingMitigations) {
+                    e.currentTarget.style.backgroundColor = '#059669'
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#10b981'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}
+                title="Automatically select and apply all mitigations from all attack paths"
+              >
+                {analyzingMitigations ? 'Analyzing...' : 'Apply All Mitigations & Analyze'}
+              </button>
+              <button
+                onClick={applyMitigations}
+                disabled={analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 6,
+                  border: 'none',
+                  backgroundColor: '#fff',
+                  color: '#667eea',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: (analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0) ? 'not-allowed' : 'pointer',
+                  opacity: (analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0) ? 0.5 : 1,
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!analyzingMitigations && Object.values(selectedMitigations).filter(Boolean).length > 0) {
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                {analyzingMitigations ? 'Analyzing...' : 'Apply Mitigations & Analyze'}
+              </button>
+            </div>
           </div>
 
           {/* Comprehensive Mitigation Summary */}
