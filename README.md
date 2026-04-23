@@ -111,7 +111,9 @@ npm install && npm run dev
 ```
 
 ## 📋 Architecture Overview
-<img width="2455" height="1361" alt="image" src="https://github.com/user-attachments/assets/6af85187-43f5-407b-a1ae-6f483911a3c5" />
+
+![Swarm TM Architecture](docs/architecture.png)
+*Click to enlarge: Comprehensive architecture showing 7-step workflow from user upload to threat model display*
 
 
 ### Four Pipeline Modes
