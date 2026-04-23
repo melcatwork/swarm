@@ -1588,11 +1588,6 @@ function ThreatModelPage() {
               <MitigationSummary
                 paths={paths}
                 title="Comprehensive Mitigation Summary - All Attack Paths"
-                selectedMitigations={selectedMitigations}
-                clearAllMitigations={clearAllMitigations}
-                applyMitigations={applyMitigations}
-                applyAllMitigations={applyAllMitigations}
-                analyzingMitigations={analyzingMitigations}
               />
             )
           })()}

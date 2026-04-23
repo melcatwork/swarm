@@ -40,13 +40,14 @@ AI-powered threat modeling platform using CrewAI multi-agent swarm intelligence 
   - Risk calculations based on CSA CII 5×5 risk matrix
 - See: `THREAT_MODEL_SUMMARY_COMPONENT.md`
 
-### ✅ Mitigation Action Toolbar Placement
-- **Added mitigation toolbar between Attack Paths and Comprehensive Mitigation Summary**
-- Provides early action opportunity after reviewing attack path cards
-- Same 3-button design: Clear Selections, Apply All Mitigations & Analyze, Apply Mitigations & Analyze
-- Purple gradient background matching existing toolbar in MitigationSummary
-- Users can now take action at two points: after attack paths OR after comprehensive summary
-- See: `MITIGATION_TOOLBAR_PRE_MITIGATION_PLACEMENT.md`
+### ✅ Mitigation Action Toolbar - Single Location
+- **Consolidated to single toolbar between Attack Paths and Comprehensive Mitigation Summary**
+- Removed redundant toolbar from bottom of MitigationSummary component
+- Provides action opportunity after reviewing attack path cards
+- 3-button design: Clear Selections, Apply All Mitigations & Analyze, Apply Mitigations & Analyze
+- Purple gradient background (#667eea → #764ba2)
+- Simplified MitigationSummary to display-only component (removed 5 unused props, 121 lines)
+- See: `MITIGATION_TOOLBAR_REMOVAL.md`
 
 ### ✅ Completeness-Based Mitigation Reduction Logic
 - **Implemented granular mitigation effectiveness based on selection completeness**
