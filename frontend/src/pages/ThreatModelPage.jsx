@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save, StopCircle, Settings, Network } from 'lucide-react';
+import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save, StopCircle, Settings, Network, Home, FileUp, BarChart3, Layers, Target, XOctagon } from 'lucide-react';
 import Toast from '../components/Toast';
 import StigmergicResultsView from '../components/StigmergicResultsView';
 import ImpactSelector from '../components/ImpactSelector';
@@ -47,6 +47,9 @@ function ThreatModelPage() {
   const [archivedRuns, setArchivedRuns] = useState([]);
   const [editingRunId, setEditingRunId] = useState(null);
   const [editingName, setEditingName] = useState('');
+
+  // Tab navigation state
+  const [activeTab, setActiveTab] = useState('main');
 
   // Cancel token for aborting requests
   const [cancelTokenSource, setCancelTokenSource] = useState(null);
@@ -989,6 +992,76 @@ function ThreatModelPage() {
         {/* Main Content */}
         <div className="main-content">
 
+          {/* Tab Navigation */}
+          <div className="tab-navigation">
+            <button
+              className={`tab-button ${activeTab === 'main' ? 'active' : ''}`}
+              onClick={() => setActiveTab('main')}
+            >
+              <Home size={16} />
+              <span>Main</span>
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'run-test' ? 'active' : ''}`}
+              onClick={() => setActiveTab('run-test')}
+              disabled={!result}
+            >
+              <FileUp size={16} />
+              <span>Run Test</span>
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'summary' ? 'active' : ''}`}
+              onClick={() => setActiveTab('summary')}
+              disabled={!result}
+            >
+              <BarChart3 size={16} />
+              <span>Summary</span>
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'architecture' ? 'active' : ''}`}
+              onClick={() => setActiveTab('architecture')}
+              disabled={!result}
+            >
+              <Layers size={16} />
+              <span>Architecture</span>
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'risk-assessment' ? 'active' : ''}`}
+              onClick={() => setActiveTab('risk-assessment')}
+              disabled={!result}
+            >
+              <AlertTriangle size={16} />
+              <span>Risk Assessment</span>
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'attack-paths' ? 'active' : ''}`}
+              onClick={() => setActiveTab('attack-paths')}
+              disabled={!result}
+            >
+              <Target size={16} />
+              <span>Attack Paths</span>
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'mitigations' ? 'active' : ''}`}
+              onClick={() => setActiveTab('mitigations')}
+              disabled={!result}
+            >
+              <Shield size={16} />
+              <span>Mitigations</span>
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'post-mitigation' ? 'active' : ''}`}
+              onClick={() => setActiveTab('post-mitigation')}
+              disabled={!postMitigationAnalysis}
+            >
+              <TrendingDown size={16} />
+              <span className="tab-text-multiline">Post-Mitigation<br/>Risk Assessment</span>
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="tab-content">
+
       {/* Landing State - Show when no results yet */}
       {!result && !running && (
         <div className="landing-state">
@@ -1039,6 +1112,7 @@ function ThreatModelPage() {
       )}
 
       {/* Section A: Upload Panel */}
+      {(activeTab === 'main' || activeTab === 'run-test') && (
       <div className="upload-panel">
         <h3>Upload Infrastructure-as-Code</h3>
 
@@ -1271,14 +1345,15 @@ function ThreatModelPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Threat Model Summary - High Level Overview */}
-      {result && (
+      {(activeTab === 'main' || activeTab === 'summary') && result && (
         <ThreatModelSummary result={result} />
       )}
 
       {/* Section B: Asset Graph View */}
-      {result && result.asset_graph && (
+      {(activeTab === 'main' || activeTab === 'architecture') && result && result.asset_graph && (
         <div className="asset-graph-panel">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <h3>Infrastructure Asset Graph</h3>
@@ -1362,7 +1437,7 @@ function ThreatModelPage() {
 
       {/* Section C: Results View */}
       {/* Stigmergic Results View */}
-      {result && result.run_type === 'multi_agents_swarm' && (
+      {activeTab === 'main' && result && result.run_type === 'multi_agents_swarm' && (
         <StigmergicResultsView results={result} />
       )}
 
@@ -1370,7 +1445,7 @@ function ThreatModelPage() {
       {result && result.run_type !== 'multi_agents_swarm' && result.final_paths && (
         <div className="results-panel">
           {/* Executive Summary */}
-          {result.executive_summary && (
+          {activeTab === 'main' && result.executive_summary && (
             <div className="executive-summary">
               <h3>Executive Summary</h3>
               <p>{result.executive_summary}</p>
@@ -1378,6 +1453,7 @@ function ThreatModelPage() {
           )}
 
           {/* Stats Bar */}
+          {activeTab === 'main' && (
           <div className="results-stats-bar">
             <div className="stat-item">
               <span className="stat-label">Total Paths</span>
@@ -1392,15 +1468,17 @@ function ThreatModelPage() {
               <span className="stat-value">{result.adversarial_summary?.coverage_estimate || 'N/A'}</span>
             </div>
           </div>
+          )}
 
           {/* CSA Risk Assessment Summary */}
-          {result.csa_risk_assessment && (
+          {(activeTab === 'main' || activeTab === 'risk-assessment') && result.csa_risk_assessment && (
             <CsaRiskSummary
               csaRiskAssessment={result.csa_risk_assessment}
             />
           )}
 
           {/* Attack Path Cards */}
+          {(activeTab === 'main' || activeTab === 'attack-paths') && (
           <div className="attack-paths-list">
             <h3>Attack Paths ({result.final_paths.length})</h3>
 
@@ -1463,8 +1541,10 @@ function ThreatModelPage() {
               )
             })()}
           </div>
+          )}
 
           {/* Mitigation Action Toolbar - Bottom of Attack Paths */}
+          {(activeTab === 'main' || activeTab === 'mitigations') && (
           <div
             style={{
               backgroundColor: 'var(--color-primary)',
@@ -1580,14 +1660,17 @@ function ThreatModelPage() {
               </button>
             </div>
           </div>
+          )}
 
           {/* Comprehensive Mitigation Summary */}
-          {(() => {
+          {(activeTab === 'main' || activeTab === 'mitigations') && (() => {
             const paths = result.csa_risk_assessment?.scored_paths || result.final_paths || []
             return (
               <MitigationSummary
                 paths={paths}
                 title="Comprehensive Mitigation Summary - All Attack Paths"
+                selectedMitigations={selectedMitigations}
+                toggleMitigationSelection={toggleMitigationSelection}
               />
             )
           })()}
@@ -1595,7 +1678,7 @@ function ThreatModelPage() {
       )}
 
       {/* Post-Mitigation Analysis Section */}
-      {postMitigationAnalysis && (
+      {(activeTab === 'main' || activeTab === 'post-mitigation') && postMitigationAnalysis && (
         <div className="results-container">
           <div className="results-header">
             <div>
@@ -1675,6 +1758,8 @@ function ThreatModelPage() {
           </div>
         </div>
       )}
+
+          </div> {/* Close tab-content */}
         </div> {/* Close main-content */}
       </div> {/* Close page-content-with-sidebar */}
     </div>

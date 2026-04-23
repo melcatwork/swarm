@@ -236,7 +236,7 @@
 .mitigation-title-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 6px;
   gap: 12px;
 }

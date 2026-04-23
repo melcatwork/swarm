@@ -20,6 +20,8 @@ const DEFENSE_LAYER_COLOURS = {
 export default function MitigationSummary({
   paths,
   title = "Comprehensive Mitigation Summary",
+  selectedMitigations = {},
+  toggleMitigationSelection = null,
 }) {
   const [expandedPaths, setExpandedPaths] = useState(new Set([0])) // First path expanded by default
   const [expandedLayers, setExpandedLayers] = useState({})
@@ -128,6 +130,7 @@ export default function MitigationSummary({
           const renderPathCard = (path, pathIndex) => {
           const isExpanded = expandedPaths.has(pathIndex)
           const pathName = path.name || path.path_name || `Attack Path ${pathIndex + 1}`
+          const pathId = path.id || path.name || `path-${pathIndex}`
           const steps = path.steps || []
 
           // Collect all mitigations for this path, organized by layer
@@ -224,7 +227,11 @@ export default function MitigationSummary({
                         {/* Layer Mitigations */}
                         {isLayerExpanded && (
                           <div className="layer-mitigations">
-                            {layerMitigations.map((mitigation, mitigationIndex) => (
+                            {layerMitigations.map((mitigation, mitigationIndex) => {
+                              const selectionKey = `${pathId}:${mitigation.stepNumber}:${mitigation.mitigation_name}`;
+                              const isSelected = selectedMitigations[selectionKey] || false;
+
+                              return (
                               <div
                                 key={mitigationIndex}
                                 className="mitigation-card"
@@ -233,6 +240,20 @@ export default function MitigationSummary({
                                 {/* Mitigation Header */}
                                 <div className="mitigation-header">
                                   <div className="mitigation-title-row">
+                                    {toggleMitigationSelection && (
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => toggleMitigationSelection(pathId, mitigation.stepNumber, mitigation.mitigation_name)}
+                                        style={{
+                                          width: 18,
+                                          height: 18,
+                                          marginRight: 12,
+                                          cursor: 'pointer',
+                                          accentColor: config.border,
+                                        }}
+                                      />
+                                    )}
                                     <h4 className="mitigation-name">{mitigation.mitigation_name}</h4>
                                     {mitigation.priority && (
                                       <span
@@ -286,7 +307,8 @@ export default function MitigationSummary({
                                   )}
                                 </div>
                               </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         )}
                       </div>
