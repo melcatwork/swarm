@@ -444,6 +444,15 @@ export default function CsaPathCard({
   const actorName = path.persona_id || path.threat_actor || path.source || 'Swarm'
   const pathId = path.path_id || path.id || path.name
 
+  // Determine header background color - use darker background for yellow "Low" risk to improve contrast
+  const getHeaderBackgroundColor = () => {
+    if (hasResidualRisk && residualBand === 'Low') {
+      // For Low (yellow) residual risk, use a darker background for better contrast
+      return '#8B7D3A15' // Dark olive/brown tint with low opacity
+    }
+    return `${bandColour}12` // Default: 12% opacity of original band color
+  }
+
   return (
     <div
       style={{
@@ -457,7 +466,7 @@ export default function CsaPathCard({
       {/* Header strip */}
       <div
         style={{
-          backgroundColor: `${bandColour}12`,
+          backgroundColor: getHeaderBackgroundColor(),
           borderBottom: `2px solid ${bandColour}`,
           padding: '10px 14px',
           cursor: 'pointer',
