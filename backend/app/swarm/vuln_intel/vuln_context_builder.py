@@ -15,9 +15,11 @@ import logging
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
-from .vuln_matcher import VulnMatcher, MatchedVuln
+from .vuln_matcher import VulnMatcher, MatchedVuln, VulnRecord
 from .chain_assembler import ChainAssembler, AssembledChain
 from ..iac_signal_extractor import IaCSignalExtractor, CloudSignal
+from .asset_fingerprinter import AssetFingerprinter
+from app.swarm.iac_asset_classifier import IaCAssetClassifier, AssetClass
 
 logger = logging.getLogger(__name__)
 
@@ -276,3 +278,183 @@ class VulnContextBuilder:
         sections.append('')
 
         return '\n'.join(sections)
+
+
+def build_per_asset_context(
+    assets: list[dict],
+    vuln_records: dict,
+) -> str:
+    """
+    Builds enriched context string for agent prompt injection.
+    Attackable assets get full vulnerability context blocks.
+    Configuration resources get a compact topology summary.
+    Security controls have their rules extracted and noted.
+    """
+    classifier = IaCAssetClassifier()
+    fingerprinter = AssetFingerprinter()
+    sections = []
+
+    # Separate by class
+    attackable = []
+    security_ctrls = []
+    configuration = []
+
+    for asset in assets:
+        cr = classifier.classify(asset)
+        if cr.asset_class == AssetClass.ATTACKABLE:
+            attackable.append(asset)
+        elif cr.asset_class == AssetClass.SECURITY_CTRL:
+            security_ctrls.append(asset)
+        else:
+            configuration.append(asset)
+
+    # Section 1 — attackable assets with full vuln context
+    if attackable:
+        sections.append(
+            "=== ATTACKABLE ASSETS "
+            "(vulnerability matching applied) ==="
+        )
+        for asset in attackable:
+            fp = fingerprinter.fingerprint(asset)
+            vulns = vuln_records.get(fp.asset_id, [])
+            lines = [
+                f"\nASSET: {fp.asset_id} ({fp.resource_type})"
+            ]
+            if fp.runtime:
+                eol = (
+                    f" [EOL since {fp.runtime_eol_date} — "
+                    "no security patches]"
+                    if fp.runtime_eol else ""
+                )
+                lines.append(f"  Runtime: {fp.runtime}{eol}")
+            if fp.engine:
+                lines.append(
+                    f"  Engine: {fp.engine} "
+                    f"{fp.engine_version or ''}"
+                )
+            if fp.public_endpoint:
+                lines.append(
+                    "  Exposure: PUBLICLY REACHABLE endpoint"
+                )
+            if fp.open_ports:
+                lines.append(
+                    f"  Open to 0.0.0.0/0: ports {fp.open_ports}"
+                )
+            # IAM profile credential theft signal
+            if fp.tags.get("imds_credential_target"):
+                lines.append(
+                    f"  IMDS credential target: "
+                    f"{fp.tags['imds_credential_target']} "
+                    "(T1552.005)"
+                )
+            # S3 security posture
+            if fp.resource_type == "aws_s3_bucket":
+                if not fp.tags.get("versioning_enabled"):
+                    lines.append(
+                        "  WARNING: Versioning disabled — "
+                        "deleted objects unrecoverable (ransomware risk)"
+                    )
+                if not fp.tags.get("mfa_delete_enabled"):
+                    lines.append(
+                        "  WARNING: MFA delete not enabled — "
+                        "bucket contents deletable without MFA"
+                    )
+                if not fp.tags.get("access_logging_enabled"):
+                    lines.append(
+                        "  WARNING: Access logging disabled — "
+                        "no audit trail for object access"
+                    )
+
+            if vulns:
+                sorted_vulns = sorted(
+                    vulns,
+                    key=lambda v: (
+                        getattr(v, 'kev_listed', False) if hasattr(v, 'kev_listed') else getattr(v, 'in_kev', False),
+                        getattr(v, 'poc_available', False),
+                        getattr(v, 'epss_score', 0.0)
+                    ),
+                    reverse=True,
+                )
+                lines.append(
+                    f"  Known vulnerabilities "
+                    f"({len(sorted_vulns)} matched, top 5 shown):"
+                )
+                for v in sorted_vulns[:5]:
+                    if hasattr(v, 'to_agent_context'):
+                        lines.append(v.to_agent_context())
+                    else:
+                        # Format MatchedVuln manually
+                        lines.append(f"  CVE: {v.vuln_id}")
+                        lines.append(
+                            f"  CVSS: {v.cvss_score:.1f}  "
+                            f"EPSS: {v.epss_score:.3f}"
+                        )
+                        in_kev = getattr(v, 'in_kev', False)
+                        lines.append(f"  Priority: {'KEV-listed' if in_kev else 'Standard'}")
+                        lines.append(f"  ATT&CK: {v.technique_id}")
+                        lines.append(f"  Description: {v.description[:200]}")
+                        if v.edb_ids:
+                            lines.append(f"  ExploitDB: {', '.join(f'EDB-{e}' for e in v.edb_ids)}")
+                        if v.nuclei_templates:
+                            lines.append(f"  Nuclei: {', '.join(v.nuclei_templates)}")
+            else:
+                if fp.runtime_eol:
+                    lines.append(
+                        "  No CVEs matched but runtime is EOL — "
+                        "treat as unpatched unknown surface"
+                    )
+                else:
+                    lines.append(
+                        "  No CVEs matched — analyse for "
+                        "misconfigurations only"
+                    )
+            sections.append("\n".join(lines))
+
+    # Section 2 — security controls summary
+    if security_ctrls:
+        ctrl_lines = [
+            "\n=== SECURITY CONTROLS "
+            "(rules associated with protected assets) ==="
+        ]
+        for asset in security_ctrls:
+            fp = fingerprinter.fingerprint(asset)
+            # Handle both Asset model format and legacy format
+            asset_id = asset.get('asset_id') or asset.get('id', '')
+            resource_type = asset.get('resource_type') or asset.get('type', '')
+            ctrl_lines.append(
+                f"\n{asset_id} "
+                f"({resource_type})"
+            )
+            if fp.tags.get("allows_public_ingress"):
+                ctrl_lines.append(
+                    f"  DANGEROUS: allows public inbound on ports "
+                    f"{fp.open_ports} from 0.0.0.0/0"
+                )
+                rules = fp.tags.get("dangerous_ingress_rules", [])
+                for rule in rules:
+                    ctrl_lines.append(
+                        f"    ports {rule['from_port']}-"
+                        f"{rule['to_port']} "
+                        f"protocol {rule['protocol']} — PUBLIC"
+                    )
+            else:
+                ctrl_lines.append(
+                    "  No public inbound rules detected"
+                )
+        sections.append("\n".join(ctrl_lines))
+
+    # Section 3 — topology summary (compact, not fingerprinted)
+    if configuration:
+        topo_lines = [
+            "\n=== NETWORK TOPOLOGY "
+            "(configuration resources — no CVE matching) ==="
+        ]
+        for asset in configuration:
+            # Handle both Asset model format and legacy format
+            rtype = asset.get("resource_type") or asset.get("type", "")
+            aid = asset.get("asset_id") or asset.get("id", "")
+            # Only include topology-relevant fields
+            topo_lines.append(f"  {aid} ({rtype})")
+        sections.append("\n".join(topo_lines))
+
+    return "\n\n".join(sections)

@@ -32,6 +32,14 @@ class MatchedVuln:
     match_reason: str
     remediation: str
 
+    # Exploit and PoC source references (enriched from exploit_adapters)
+    edb_ids:           list[str] = field(default_factory=list)
+    edb_titles:        list[str] = field(default_factory=list)
+    nuclei_templates:  list[str] = field(default_factory=list)
+    nuclei_severity:   str = ""
+    poc_available:     bool = False
+    poc_sources:       list[str] = field(default_factory=list)
+
     @property
     def risk_score(self) -> float:
         """
@@ -53,6 +61,73 @@ class MatchedVuln:
             * diff_multiplier
             * detection_bonus
         ) / 3.0)
+
+
+@dataclass
+class VulnRecord:
+    """
+    Enriched vulnerability record with exploit intelligence from multiple sources.
+    Used for agent prompt injection with full CVE context and PoC references.
+    """
+    cve_id: str
+    description: str
+    cvss_score: float
+    epss_score: float
+    epss_percentile: float
+    kev_listed: bool
+    attck_technique: Optional[str] = None
+
+    # Exploit and PoC source references
+    edb_ids:           list[str] = field(default_factory=list)
+    edb_titles:        list[str] = field(default_factory=list)
+    nuclei_templates:  list[str] = field(default_factory=list)
+    nuclei_severity:   Optional[str] = None
+    ghsa_id:           Optional[str] = None
+    packetstorm_refs:  list[str] = field(default_factory=list)
+    affected_versions: list[str] = field(default_factory=list)
+    patch_available:   bool = False
+    poc_available:     bool = False
+    poc_sources:       list[str] = field(default_factory=list)
+
+    def exploit_priority_label(self) -> str:
+        """Human-readable priority label for agent prompt injection."""
+        if self.kev_listed and self.poc_available:
+            return "CRITICAL — KEV-listed with public PoC confirmed"
+        if self.kev_listed:
+            return "HIGH — actively exploited per CISA KEV"
+        if self.poc_available:
+            return "HIGH — public exploit or PoC available"
+        if self.epss_score > 0.5:
+            return "MEDIUM-HIGH — EPSS exploitation probability above 50%"
+        return "MEDIUM — no known public exploit at this time"
+
+    def to_agent_context(self) -> str:
+        """
+        Formats this VulnRecord as a cited block for injection into
+        a persona agent prompt. All source references are included.
+        """
+        lines = [
+            f"  CVE: {self.cve_id}",
+            f"  CVSS: {self.cvss_score:.1f}  "
+            f"EPSS: {self.epss_score:.3f} "
+            f"({self.epss_percentile:.0f}th percentile)",
+            f"  Priority: {self.exploit_priority_label()}",
+            f"  ATT&CK: {self.attck_technique or 'unmapped'}",
+            f"  Description: {self.description[:200]}",
+        ]
+        if self.edb_ids:
+            refs = ", ".join(f"EDB-{e}" for e in self.edb_ids)
+            lines.append(f"  ExploitDB: {refs}")
+        if self.nuclei_templates:
+            lines.append(
+                f"  Nuclei: {', '.join(self.nuclei_templates)}"
+            )
+        if self.ghsa_id:
+            lines.append(f"  GitHub Advisory: {self.ghsa_id}")
+        if self.packetstorm_refs:
+            lines.append(f"  PacketStorm: {self.packetstorm_refs[0]}")
+        return "\n".join(lines)
+
 
 class VulnMatcher:
     """
@@ -106,6 +181,38 @@ class VulnMatcher:
             if key not in seen:
                 seen.add(key)
                 deduped.append(m)
+
+        # Enrich CVE matches with exploit intelligence
+        from .exploit_adapters import ExploitDBAdapter, NucleiTemplateAdapter
+        _edb = ExploitDBAdapter()
+        _nuclei = NucleiTemplateAdapter()
+
+        for record in deduped:
+            # Only enrich CVE entries, not cloud abuse patterns
+            if not record.vuln_id.startswith('CVE-'):
+                continue
+
+            # Look up ExploitDB entries
+            edb_results = _edb.lookup_by_cve(record.vuln_id)
+            if edb_results:
+                record.edb_ids = [r["edb_id"] for r in edb_results]
+                record.edb_titles = [r["title"] for r in edb_results]
+                record.poc_available = True
+                record.poc_sources.extend(
+                    [f"ExploitDB:{r['edb_id']}" for r in edb_results]
+                )
+
+            # Look up Nuclei templates
+            nuclei_results = _nuclei.lookup_by_cve(record.vuln_id)
+            if nuclei_results:
+                record.nuclei_templates = [
+                    r["template_id"] for r in nuclei_results
+                ]
+                record.nuclei_severity = nuclei_results[0].get("severity", "")
+                record.poc_available = True
+                record.poc_sources.extend(
+                    [f"Nuclei:{r['template_id']}" for r in nuclei_results]
+                )
 
         # Sort by risk_score descending
         deduped.sort(key=lambda m: m.risk_score, reverse=True)

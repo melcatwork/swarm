@@ -487,15 +487,41 @@ async def run_swarm_exploration(
     final_snapshot = shared_graph.get_snapshot()
 
     # Extract asset IDs from asset graph for coverage analysis
+    # IMPORTANT: Only extract ATTACKABLE assets for coverage analysis
+    # Configuration resources (VPCs, subnets, route tables) should not appear in Coverage Gaps
+    from .iac_asset_classifier import IaCAssetClassifier, AssetClass
+    classifier = IaCAssetClassifier()
+
     asset_ids = []
     if isinstance(asset_graph, dict):
         if "nodes" in asset_graph:
-            asset_ids = [node.get("id", node.get("name", "unknown")) for node in asset_graph.get("nodes", [])]
+            # Graph format with nodes list
+            all_nodes = asset_graph.get("nodes", [])
+            # Filter to attackable nodes only
+            for node in all_nodes:
+                cr = classifier.classify(node)
+                if cr.asset_class in (AssetClass.ATTACKABLE, AssetClass.SECURITY_CTRL):
+                    asset_ids.append(node.get("id", node.get("name", "unknown")))
         elif "resources" in asset_graph:
-            asset_ids = list(asset_graph.get("resources", {}).keys())
+            # Alternative format with resources dict
+            all_resources = asset_graph.get("resources", {})
+            for resource_id, resource_config in all_resources.items():
+                resource_dict = {"asset_id": resource_id, **resource_config}
+                cr = classifier.classify(resource_dict)
+                if cr.asset_class in (AssetClass.ATTACKABLE, AssetClass.SECURITY_CTRL):
+                    asset_ids.append(resource_id)
+        elif "assets" in asset_graph:
+            # AssetGraph model format with assets list
+            all_assets = asset_graph.get("assets", [])
+            # Filter to attackable assets only
+            attackable_assets = classifier.filter_attackable(all_assets)
+            asset_ids = [asset.get("id") or asset.get("asset_id") for asset in attackable_assets if asset.get("id") or asset.get("asset_id")]
         else:
-            # Fallback: extract all string values that look like asset IDs
-            asset_ids = [k for k in asset_graph.keys() if isinstance(k, str)]
+            # Fallback: try to find asset IDs in nested structures
+            logger.warning("Asset graph format not recognized, using empty asset_ids for coverage analysis")
+            asset_ids = []
+
+    logger.info(f"Coverage analysis: {len(asset_ids)} attackable assets (configuration resources excluded)")
 
     # Extract emergent insights
     emergent_insights = shared_graph.extract_emergent_insights(asset_ids)

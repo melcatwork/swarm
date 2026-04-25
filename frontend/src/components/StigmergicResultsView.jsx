@@ -918,7 +918,7 @@ const StigmergicResultsView = ({ results }) => {
           </span>
         </div>
         <div className="stat-item">
-          <span className="stat-label">Coverage</span>
+          <span className="stat-label">Attack Surface Coverage</span>
           <span className="stat-value">
             {emergent_insights?.summary?.coverage_percentage
               ? `${emergent_insights.summary.coverage_percentage.toFixed(1)}%`

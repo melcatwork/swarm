@@ -4,7 +4,56 @@ AI-powered threat modeling platform using CrewAI multi-agent swarm intelligence 
 
 **Repository**: https://github.com/redcountryroad/swarm-tm (private)
 **Status**: Production Ready ✅
-**Last Updated**: 2026-04-23
+**Last Updated**: 2026-04-25
+
+## Recent Changes (2026-04-25)
+
+### ✅ Vulnerability Intelligence UI Components
+- **Added comprehensive CVE evidence display in attack path steps**
+- **Added persona intelligence status panel showing patch currency**
+- **Added vulnerability aggregation summary across all paths**
+- Surfaces all vulnerability intelligence from Living Intelligence System
+- **Frontend changes**:
+  - `frontend/src/components/CveEvidenceStrip.jsx` — CVE evidence display with CVSS, EPSS, KEV flag, exploit references (NEW FILE)
+  - `frontend/src/components/PersonaStatusPanel.jsx` — Collapsible panel showing patch count, last sync date, sources for all 13 personas (NEW FILE)
+  - `frontend/src/components/VulnIntelSummary.jsx` — Aggregate summary showing unique CVEs, KEV count, PoC count, CVSS critical, peak EPSS (NEW FILE)
+  - `frontend/src/components/EolWarningBadge.jsx` — Amber warning badge for EOL runtimes (NEW FILE)
+  - `frontend/src/components/CsaPathCard.jsx` — Integrated CveEvidenceStrip below each step description (lines 11, 206)
+  - `frontend/src/pages/ThreatModelPage.jsx` — Added PersonaStatusPanel above upload form, VulnIntelSummary above attack paths (lines 12-13, 1118, 1489)
+- **Backend changes**:
+  - `backend/app/routers/swarm.py` — Added GET /api/swarm/persona-status endpoint (line 291)
+  - Uses `get_patch_summary()` from persona_loader to return patch statistics
+- **CVE Evidence Strip Features**:
+  - Only renders when step contains cve_id field
+  - Shows CVE ID, CVSS score (color-coded), EPSS percentage with bar
+  - KEV (Known Exploited Vulnerability) badge for CISA-listed CVEs
+  - Exploit priority label (CRITICAL/HIGH/MEDIUM-HIGH/MEDIUM)
+  - Clickable references: ExploitDB, Nuclei templates, GitHub Security Advisories
+  - Color-coded background and border based on priority level
+- **Persona Status Panel Features**:
+  - Collapsible header showing total patches applied across all personas
+  - Expandable table with 13 rows (one per persona)
+  - Status dot: green (≤7 days), amber (≤30 days), red (>30 days) since last update
+  - Shows patch count, sources (comma-separated), last updated date
+  - Fetches from /api/swarm/persona-status on mount
+- **Vuln Intel Summary Features**:
+  - 5 stat boxes: Unique CVEs, KEV Listed, PoC Confirmed, CVSS Critical, Peak EPSS
+  - Only renders if at least one step contains cve_id
+  - Color-coded stat values (red for high severity, amber for medium, green for low)
+  - Positioned between CSA Risk Summary and Attack Paths heading
+- **Benefits**:
+  - ✅ Real-time visibility of vulnerability intelligence driving attack paths
+  - ✅ Users can see CVE evidence supporting each step without leaving UI
+  - ✅ Persona intelligence currency visible before running scans
+  - ✅ Aggregate metrics provide instant severity assessment
+  - ✅ Clickable exploit references enable immediate verification
+  - ✅ Graceful degradation: components only render when data available
+- **Integration Points**:
+  - Works with all 4 run types (Full Swarm, Quick Run, Single Agent, Stigmergic Swarm)
+  - Backward compatible: no breaking changes to existing components
+  - ImpactSelector and pipeline visualization unchanged
+  - All new components use existing CSS variables for theming
+- See implementation verification in conversation history
 
 ## Recent Changes (2026-04-23)
 

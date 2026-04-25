@@ -1,0 +1,187 @@
+/* =============================================================================
+   Emergent Insights Standard Component Styles
+   Simplified insights for Full Swarm, Quick Run, and Single Agent run types
+   ============================================================================= */
+
+.emergent-insights-standard {
+  background-color: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+/* =============================================================================
+   Section Header (Collapsible)
+   ============================================================================= */
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background-color: #f8fafc;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.section-header:hover {
+  background-color: #f1f5f9;
+}
+
+.section-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+/* =============================================================================
+   Insights Grid (2-column layout)
+   ============================================================================= */
+
+.insights-grid-standard {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+/* =============================================================================
+   Insight Cards (High Confidence Techniques + Coverage Gaps)
+   ============================================================================= */
+
+.insight-card-standard {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.insight-card-standard h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.insight-description {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0 0 1rem 0;
+}
+
+/* =============================================================================
+   Technique List
+   ============================================================================= */
+
+.technique-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.technique-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.technique-badge-link {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background-color: #3b82f6;
+  color: white;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-decoration: none;
+  font-family: 'Courier New', monospace;
+  transition: background-color 0.2s;
+}
+
+.technique-badge-link:hover {
+  background-color: #2563eb;
+}
+
+.technique-name {
+  flex: 1;
+  color: #475569;
+  font-size: 0.8rem;
+}
+
+.technique-reinforcement {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #10b981;
+  padding: 0.2rem 0.5rem;
+  background-color: #d1fae5;
+  border-radius: 4px;
+}
+
+/* =============================================================================
+   Coverage Gaps List
+   ============================================================================= */
+
+.gap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.gap-item {
+  padding: 0.4rem 0.75rem;
+  background-color: white;
+  border: 1px solid #fecaca;
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.gap-item code {
+  color: #991b1b;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+}
+
+/* =============================================================================
+   Empty States & More Items Indicator
+   ============================================================================= */
+
+.empty-state {
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0 0;
+}
+
+.more-items {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+/* =============================================================================
+   Responsive Adjustments
+   ============================================================================= */
+
+@media (max-width: 768px) {
+  .insights-grid-standard {
+    grid-template-columns: 1fr;
+  }
+}

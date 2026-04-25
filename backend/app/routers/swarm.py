@@ -33,6 +33,7 @@ from app.swarm.output_filter import (
 )
 from app.swarm.consensus_aggregator import aggregate_consensus, get_high_consensus_techniques
 from app.swarm.csa_risk_scorer import score_all_paths
+from app.swarm.vuln_intel.persona_loader import get_patch_summary
 # Note: Lazy import crews to avoid CrewAI/LiteLLM initialization at module load time
 # CrewAI will default to OpenAI if imported before environment is configured
 # from app.swarm.crews import (
@@ -285,6 +286,148 @@ async def get_persona(name: str):
     except Exception as e:
         logger.error(f"Failed to get persona '{name}': {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/persona-status")
+async def persona_status():
+    """
+    Returns the patch summary for all 13 personas.
+    Used by PersonaStatusPanel.jsx in the frontend.
+
+    Returns:
+        Dict mapping persona_id to patch statistics:
+        {
+            "persona_id": {
+                "patch_count": int,
+                "last_updated": str (ISO date),
+                "sources": str (comma-separated source names)
+            }
+        }
+    """
+    return get_patch_summary()
+
+
+@router.post("/classify")
+async def classify_assets(file: UploadFile = File(...)):
+    """
+    Accepts an IaC file and returns the asset classification
+    report showing which resources are attackable assets,
+    security controls, and configuration resources.
+    Useful for debugging and verifying classifier coverage.
+
+    Args:
+        file: IaC file upload (.tf, .yaml, .yml, or .json)
+
+    Returns:
+        Classification report dict with counts and resource details
+
+    Raises:
+        HTTPException: 400 for parsing errors, 422 for unsupported format
+    """
+    try:
+        # Parse the IaC file
+        asset_graph = await _parse_iac_file(file)
+        asset_graph_dict = asset_graph.model_dump()
+        assets = asset_graph_dict.get('assets', [])
+
+        # Classify assets
+        from app.swarm.iac_asset_classifier import IaCAssetClassifier
+        classifier = IaCAssetClassifier()
+        report = classifier.classification_report(assets)
+
+        return {
+            "total":            report["total"],
+            "attackable":       report["attackable"],
+            "security_control": report["security_control"],
+            "configuration":    report["configuration"],
+            "unknown":          report["unknown"],
+            "resources":        report["resources"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Asset classification failed: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/sync-intelligence")
+async def sync_intelligence(background_tasks: BackgroundTasks):
+    """
+    Triggers manual persona intelligence sync.
+    Runs sync_intel.py in background and returns immediately.
+    Used by PersonaStatusPanel "Sync Now" button.
+
+    Returns:
+        Dict with status and message
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    # Check LLM credentials using settings (which loads from .env)
+    settings = get_settings()
+
+    # Get credentials from settings object (loads from .env automatically)
+    bedrock_token = settings.AWS_BEARER_TOKEN_BEDROCK
+    anthropic_key = settings.ANTHROPIC_API_KEY
+
+    if not bedrock_token and not anthropic_key:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "No LLM Credentials",
+                "message": "AWS_BEARER_TOKEN_BEDROCK or ANTHROPIC_API_KEY required for intelligence sync. "
+                          "Set credentials in .env to enable automatic persona updates.",
+            }
+        )
+
+    # Path to sync script
+    backend_dir = Path(__file__).parent.parent.parent
+    sync_script = backend_dir / "scripts" / "sync_intel.py"
+
+    if not sync_script.exists():
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Script Not Found",
+                "message": f"sync_intel.py not found at {sync_script}",
+            }
+        )
+
+    # Run sync in background
+    def run_sync():
+        try:
+            # Pass environment variables to subprocess to ensure .env is accessible
+            env = os.environ.copy()
+            if bedrock_token:
+                env['AWS_BEARER_TOKEN_BEDROCK'] = bedrock_token
+            if anthropic_key:
+                env['ANTHROPIC_API_KEY'] = anthropic_key
+
+            result = subprocess.run(
+                [sys.executable, str(sync_script), "--force"],
+                cwd=str(backend_dir.parent),
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 minute timeout
+                env=env  # Pass credentials to subprocess
+            )
+            logger.info(f"Intelligence sync completed: {result.returncode}")
+            if result.returncode != 0:
+                logger.error(f"Sync stderr: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            logger.error("Intelligence sync timed out after 10 minutes")
+        except Exception as e:
+            logger.error(f"Intelligence sync failed: {e}")
+
+    background_tasks.add_task(run_sync)
+
+    return {
+        "status": "started",
+        "message": "Intelligence sync started in background. This may take 2-5 minutes. "
+                  "Refresh the persona status panel to see updates.",
+        "provider": "bedrock" if bedrock_token else "anthropic"
+    }
 
 
 @router.post("/personas", response_model=PersonaResponse)
@@ -766,6 +909,121 @@ def _run_evaluation(
     return scored_paths
 
 
+def _extract_emergent_insights(
+    attack_paths: List[Dict],
+    asset_graph: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Extract emergent insights from attack paths for non-stigmergic run types.
+
+    This function provides similar insights to stigmergic runs but derived from
+    the final attack paths rather than the shared graph coordination process.
+
+    Args:
+        attack_paths: List of attack path dictionaries
+        asset_graph: Infrastructure asset graph dictionary
+
+    Returns:
+        Dictionary with emergent insights including:
+        - high_confidence_techniques: Techniques appearing in multiple paths
+        - coverage_gaps: Attackable assets not targeted in any path
+    """
+    from app.swarm.iac_asset_classifier import IaCAssetClassifier, AssetClass
+
+    # Extract high-confidence techniques (appear in 2+ paths)
+    technique_counts = {}
+    technique_details = {}
+
+    for path in attack_paths:
+        seen_in_path = set()
+        kill_chain = path.get("kill_chain", [])
+
+        for step in kill_chain:
+            tech_id = step.get("technique_id", "")
+            tech_name = step.get("technique_name", "")
+            asset_id = step.get("target_asset", "")
+            phase = step.get("kill_chain_phase", "")
+
+            if tech_id and tech_id not in seen_in_path:
+                seen_in_path.add(tech_id)
+
+                if tech_id not in technique_counts:
+                    technique_counts[tech_id] = 0
+                    technique_details[tech_id] = {
+                        "technique_id": tech_id,
+                        "technique_name": tech_name,
+                        "asset_id": asset_id,
+                        "kill_chain_phase": phase,
+                    }
+                technique_counts[tech_id] += 1
+
+    # Filter to techniques appearing in 2+ paths (high confidence)
+    high_confidence_techniques = [
+        {
+            **technique_details[tech_id],
+            "times_reinforced": count - 1,  # First appearance is deposit, rest are reinforcements
+            "path_count": count,
+        }
+        for tech_id, count in technique_counts.items()
+        if count >= 2
+    ]
+
+    # Sort by path count descending
+    high_confidence_techniques.sort(key=lambda t: t["path_count"], reverse=True)
+
+    # Calculate coverage gaps
+    classifier = IaCAssetClassifier()
+    assets_list = asset_graph.get("assets", [])
+
+    # Filter to attackable assets only
+    attackable_assets = classifier.filter_attackable(assets_list)
+    attackable_asset_ids = [
+        asset.get("id") or asset.get("asset_id")
+        for asset in attackable_assets
+        if asset.get("id") or asset.get("asset_id")
+    ]
+
+    # Extract assets targeted in attack paths
+    targeted_assets = set()
+    for path in attack_paths:
+        kill_chain = path.get("kill_chain", [])
+        for step in kill_chain:
+            target = step.get("target_asset", "")
+            if target:
+                targeted_assets.add(target)
+
+    # Coverage gaps = attackable assets not targeted
+    coverage_gaps = [
+        asset_id for asset_id in attackable_asset_ids
+        if asset_id not in targeted_assets
+    ]
+
+    # Calculate coverage percentage
+    coverage_percentage = (
+        (len(targeted_assets) / len(attackable_asset_ids) * 100)
+        if attackable_asset_ids else 100
+    )
+
+    logger.info(
+        f"Emergent insights extracted: "
+        f"{len(high_confidence_techniques)} high-confidence techniques, "
+        f"{len(coverage_gaps)} coverage gaps, "
+        f"{coverage_percentage:.1f}% coverage"
+    )
+
+    return {
+        "high_confidence_techniques": high_confidence_techniques,
+        "coverage_gaps": coverage_gaps,
+        "summary": {
+            "total_high_confidence_techniques": len(high_confidence_techniques),
+            "total_coverage_gaps": len(coverage_gaps),
+            "coverage_percentage": round(coverage_percentage, 1),
+            "total_attackable_assets": len(attackable_asset_ids),
+            "assets_targeted": len(targeted_assets),
+        }
+    }
+
+
 @router.post("/explore", response_model=ExploreResponse)
 async def explore_infrastructure(request: ExploreRequest):
     """
@@ -1222,6 +1480,10 @@ class PipelineResponse(BaseModel):
         default=None,
         description="CSA CII 5×5 risk matrix assessment with scored paths, risk distribution, and tolerance actions",
     )
+    emergent_insights: Dict[str, Any] | None = Field(
+        default=None,
+        description="Emergent insights including high-confidence techniques and coverage gaps",
+    )
     error: str | None = Field(
         default=None,
         description="Error message if status is error",
@@ -1335,6 +1597,19 @@ async def run_full_pipeline(
         logger.info("Pipeline Phase 1: Parsing IaC file")
         asset_graph = await _parse_iac_file(file)
         asset_graph_dict = asset_graph.model_dump()
+
+        # Classify assets and log the report
+        from app.swarm.iac_asset_classifier import IaCAssetClassifier
+        classifier = IaCAssetClassifier()
+        assets_list = asset_graph_dict.get('assets', [])
+        classification_report = classifier.classification_report(assets_list)
+        logger.info(
+            f"Asset classification: "
+            f"{classification_report['attackable']} attackable, "
+            f"{classification_report['security_control']} security controls, "
+            f"{classification_report['configuration']} configuration, "
+            f"{classification_report['unknown']} unknown"
+        )
 
         # Build threat intel context
         logger.info("Building threat intelligence context")
@@ -1577,6 +1852,13 @@ async def run_full_pipeline(
             ],
         }
 
+        # Extract emergent insights (high-confidence techniques and coverage gaps)
+        logger.info("Extracting emergent insights from attack paths")
+        emergent_insights = _extract_emergent_insights(
+            final_paths_with_mitigations,
+            asset_graph_dict
+        )
+
         response = PipelineResponse(
             status="ok",
             asset_graph=asset_graph_dict,
@@ -1596,6 +1878,7 @@ async def run_full_pipeline(
             executive_summary=executive_summary,
             execution_time_seconds=round(execution_time, 2),
             csa_risk_assessment=csa_assessment,
+            emergent_insights=emergent_insights,
         )
 
         # Auto-save to archive
@@ -1720,6 +2003,19 @@ async def run_quick_pipeline(
         logger.info("2 agents test Phase 1: Parsing IaC file")
         asset_graph = await _parse_iac_file(file)
         asset_graph_dict = asset_graph.model_dump()
+
+        # Classify assets and log the report
+        from app.swarm.iac_asset_classifier import IaCAssetClassifier
+        classifier = IaCAssetClassifier()
+        assets_list = asset_graph_dict.get('assets', [])
+        classification_report = classifier.classification_report(assets_list)
+        logger.info(
+            f"Asset classification: "
+            f"{classification_report['attackable']} attackable, "
+            f"{classification_report['security_control']} security controls, "
+            f"{classification_report['configuration']} configuration, "
+            f"{classification_report['unknown']} unknown"
+        )
 
         # Build threat intel context
         logger.info("Building threat intelligence context")
@@ -1934,6 +2230,13 @@ async def run_quick_pipeline(
             ],
         }
 
+        # Extract emergent insights (high-confidence techniques and coverage gaps)
+        logger.info("Extracting emergent insights from attack paths")
+        emergent_insights = _extract_emergent_insights(
+            final_paths_with_mitigations,
+            asset_graph_dict
+        )
+
         response = PipelineResponse(
             status="ok",
             asset_graph=asset_graph_dict,
@@ -1952,6 +2255,7 @@ async def run_quick_pipeline(
             executive_summary=executive_summary,
             execution_time_seconds=round(execution_time, 2),
             csa_risk_assessment=csa_assessment,
+            emergent_insights=emergent_insights,
         )
 
         # Auto-save to archive
@@ -2085,6 +2389,19 @@ async def run_single_agent_pipeline(
         logger.info("single agent run Phase 1: Parsing IaC file")
         asset_graph = await _parse_iac_file(file)
         asset_graph_dict = asset_graph.model_dump()
+
+        # Classify assets and log the report
+        from app.swarm.iac_asset_classifier import IaCAssetClassifier
+        classifier = IaCAssetClassifier()
+        assets_list = asset_graph_dict.get('assets', [])
+        classification_report = classifier.classification_report(assets_list)
+        logger.info(
+            f"Asset classification: "
+            f"{classification_report['attackable']} attackable, "
+            f"{classification_report['security_control']} security controls, "
+            f"{classification_report['configuration']} configuration, "
+            f"{classification_report['unknown']} unknown"
+        )
 
         # Build threat intel context
         logger.info("Building threat intelligence context")
@@ -2301,6 +2618,13 @@ async def run_single_agent_pipeline(
             ],
         }
 
+        # Extract emergent insights (high-confidence techniques and coverage gaps)
+        logger.info("Extracting emergent insights from attack paths")
+        emergent_insights = _extract_emergent_insights(
+            final_paths_with_mitigations,
+            asset_graph_dict
+        )
+
         response = PipelineResponse(
             status="ok",
             asset_graph=asset_graph_dict,
@@ -2319,6 +2643,7 @@ async def run_single_agent_pipeline(
             executive_summary=executive_summary,
             execution_time_seconds=round(execution_time, 2),
             csa_risk_assessment=csa_assessment,
+            emergent_insights=emergent_insights,
         )
 
         # Auto-save to archive
@@ -3058,6 +3383,19 @@ async def run_stigmergic_swarm_pipeline(
         logger.info("Phase 1: Parsing IaC file")
         asset_graph = await _parse_iac_file(file)
         asset_graph_dict = asset_graph.model_dump()
+
+        # Classify assets and log the report
+        from app.swarm.iac_asset_classifier import IaCAssetClassifier
+        classifier = IaCAssetClassifier()
+        assets_list = asset_graph_dict.get('assets', [])
+        classification_report = classifier.classification_report(assets_list)
+        logger.info(
+            f"Asset classification: "
+            f"{classification_report['attackable']} attackable, "
+            f"{classification_report['security_control']} security controls, "
+            f"{classification_report['configuration']} configuration, "
+            f"{classification_report['unknown']} unknown"
+        )
 
         # Get enabled personas
         enabled_personas_dict = persona_registry.get_enabled()

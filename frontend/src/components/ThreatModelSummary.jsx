@@ -20,6 +20,26 @@ const BAND_COLOURS = {
 
 const BANDS_ORDER = ['Very High', 'High', 'Medium-High', 'Medium', 'Low']
 
+/**
+ * Extract numeric percentage from coverage assessment text.
+ * Example: "approximately 65%" -> 65.0
+ *          "cover 70% of" -> 70.0
+ *          "Unknown" -> null
+ */
+function extractCoveragePercentage(coverageText) {
+  if (!coverageText || typeof coverageText !== 'string') {
+    return null
+  }
+
+  // Match patterns like "65%", "approximately 70%", "cover 80% of"
+  const match = coverageText.match(/(\d+(?:\.\d+)?)\s*%/)
+  if (match) {
+    return parseFloat(match[1])
+  }
+
+  return null
+}
+
 export default function ThreatModelSummary({ result }) {
   if (!result) return null
 
@@ -55,9 +75,18 @@ export default function ThreatModelSummary({ result }) {
                               result.csa_risk_assessment?.highest_band ||
                               'Low'
 
-  // Get coverage details (if available from stigmergic swarm)
-  const coveragePercentage = result.emergent_insights?.summary?.coverage_percentage ||
-                             result.adversarial_summary?.coverage_estimate
+  // Get coverage details
+  // For Stigmergic Swarm: use numeric percentage from emergent_insights
+  // For Full Swarm, Quick Run, Single Agent: extract percentage from adversarial coverage_estimate text
+  let coveragePercentage = result.emergent_insights?.summary?.coverage_percentage
+
+  // If not stigmergic, try to extract from adversarial coverage_estimate
+  if (!coveragePercentage && result.adversarial_summary?.coverage_estimate) {
+    const extracted = extractCoveragePercentage(result.adversarial_summary.coverage_estimate)
+    if (extracted !== null) {
+      coveragePercentage = extracted
+    }
+  }
 
   // Impact configuration
   const impactConfig = result.csa_risk_assessment?.impact_configuration
@@ -214,7 +243,7 @@ export default function ThreatModelSummary({ result }) {
         </div>
 
         {/* Coverage Percentage (if available) */}
-        {coveragePercentage && (
+        {typeof coveragePercentage === 'number' && (
           <div style={{
             backgroundColor: 'var(--color-background-secondary)',
             borderRadius: 8,
@@ -238,9 +267,7 @@ export default function ThreatModelSummary({ result }) {
               lineHeight: 1,
               marginBottom: 8,
             }}>
-              {typeof coveragePercentage === 'number'
-                ? `${coveragePercentage.toFixed(1)}%`
-                : coveragePercentage}
+              {coveragePercentage.toFixed(1)}%
             </div>
             <div style={{
               fontSize: 11,

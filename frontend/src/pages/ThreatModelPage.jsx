@@ -3,12 +3,17 @@ import axios from 'axios';
 import { Upload, Play, Zap, ChevronDown, ChevronUp, Shield, AlertTriangle, CheckCircle, User, Check, X, TrendingDown, Archive, Edit2, Trash2, Save, StopCircle, Settings, Network, Home, FileUp, BarChart3, Layers, Target, XOctagon } from 'lucide-react';
 import Toast from '../components/Toast';
 import StigmergicResultsView from '../components/StigmergicResultsView';
+import SharedAttackGraph from '../components/SharedAttackGraph';
 import ImpactSelector from '../components/ImpactSelector';
 import ThreatModelSummary from '../components/ThreatModelSummary';
 import CsaRiskSummary from '../components/CsaRiskSummary';
 import ResidualRiskSummary from '../components/ResidualRiskSummary';
 import CsaPathCard from '../components/CsaPathCard';
 import MitigationSummary from '../components/MitigationSummary';
+import PersonaStatusPanel from '../components/PersonaStatusPanel';
+import VulnIntelSummary from '../components/VulnIntelSummary';
+import EmergentInsightsStandard from '../components/EmergentInsightsStandard';
+import ExecutionTimeline from '../components/ExecutionTimeline';
 import { uploadAndRunSwarm, uploadAndRunQuick, uploadAndRunSingleAgent, uploadAndRunStigmergic, getPersonas, analyzePostMitigation, getArchivedRuns, getArchivedRun, updateRunName, deleteArchivedRun, getAvailableModels, checkHealth, cancelRun } from '../api/client';
 import { formatGMT8DateShort, formatGMT8Time } from '../utils/formatters';
 import './ThreatModelPage.css';
@@ -1111,6 +1116,11 @@ function ThreatModelPage() {
         </div>
       )}
 
+      {/* Persona Intelligence Status Panel */}
+      {(activeTab === 'main' || activeTab === 'run-test') && (
+        <PersonaStatusPanel />
+      )}
+
       {/* Section A: Upload Panel */}
       {(activeTab === 'main' || activeTab === 'run-test') && (
       <div className="upload-panel">
@@ -1436,9 +1446,135 @@ function ThreatModelPage() {
       )}
 
       {/* Section C: Results View */}
-      {/* Stigmergic Results View */}
+      {/* Stigmergic Results View - Show full view ONLY on main tab */}
       {activeTab === 'main' && result && result.run_type === 'multi_agents_swarm' && (
         <StigmergicResultsView results={result} />
+      )}
+
+      {/* Stigmergic Results - Tab-specific sections */}
+      {result && result.run_type === 'multi_agents_swarm' && activeTab !== 'main' && (
+        <div className="results-panel">
+          {/* Risk Assessment Tab */}
+          {activeTab === 'risk-assessment' && result.evaluation_summary && (
+            <>
+              <CsaRiskSummary
+                csaRiskAssessment={{
+                  scored_paths: result.attack_paths || [],
+                  total_paths: result.attack_paths?.length || 0,
+                  paths_scored: result.attack_paths?.length || 0,
+                  risk_distribution: {
+                    ...result.evaluation_summary.risk_distribution,
+                    highest_band: result.evaluation_summary.risk_distribution?.highest_band ||
+                                  result.evaluation_summary.highest_band || 'Medium'
+                  },
+                  highest_band: result.evaluation_summary.risk_distribution?.highest_band ||
+                               result.evaluation_summary.highest_band || 'Medium',
+                  overall_risk_level: result.evaluation_summary.overall_risk_level || 0,
+                  impact_config: result.evaluation_summary.impact_config,
+                  framework: 'CSA CII Risk Assessment Guide (Feb 2021) Section 4.2'
+                }}
+              />
+              <ExecutionTimeline result={result} runType="stigmergic" />
+            </>
+          )}
+
+          {/* Attack Paths Tab */}
+          {activeTab === 'attack-paths' && (
+            <>
+              {result.shared_graph_snapshot && (
+                <div style={{ marginBottom: 32 }}>
+                  <h3 style={{ fontSize: 18, marginBottom: 16 }}>Shared Attack Graph</h3>
+                  <SharedAttackGraph
+                    data={result.shared_graph_snapshot}
+                    coverageGaps={result.emergent_insights?.coverage_gaps || []}
+                    convergentPaths={result.emergent_insights?.convergent_paths || []}
+                  />
+                </div>
+              )}
+              <div className="attack-paths-list">
+                <h3>Attack Paths ({result.attack_paths?.length || 0})</h3>
+                {(result.attack_paths || []).map((path, i) => (
+                  <CsaPathCard
+                    key={path.path_id || path.id || `stig-path-${i}`}
+                    path={path}
+                    defaultExpanded={false}
+                    selectedMitigations={selectedMitigations}
+                    toggleMitigationSelection={toggleMitigationSelection}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Mitigations Tab */}
+          {activeTab === 'mitigations' && (
+            <>
+              {/* Mitigation Action Toolbar */}
+              <div
+                style={{
+                  backgroundColor: 'var(--color-primary)',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  padding: '16px 20px',
+                  borderRadius: 8,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 24,
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
+                    {Object.values(selectedMitigations).filter(Boolean).length} mitigation(s) selected
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button
+                    onClick={clearAllMitigations}
+                    disabled={Object.values(selectedMitigations).filter(Boolean).length === 0}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: 6,
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: Object.values(selectedMitigations).filter(Boolean).length === 0 ? 'not-allowed' : 'pointer',
+                      opacity: Object.values(selectedMitigations).filter(Boolean).length === 0 ? 0.5 : 1,
+                    }}
+                  >
+                    Clear Selections
+                  </button>
+                  <button
+                    onClick={applyMitigations}
+                    disabled={analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: 6,
+                      border: 'none',
+                      backgroundColor: '#fff',
+                      color: '#667eea',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: (analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0) ? 'not-allowed' : 'pointer',
+                      opacity: (analyzingMitigations || Object.values(selectedMitigations).filter(Boolean).length === 0) ? 0.5 : 1,
+                    }}
+                  >
+                    {analyzingMitigations ? 'Analyzing...' : 'Apply Mitigations & Analyze'}
+                  </button>
+                </div>
+              </div>
+
+              <MitigationSummary
+                paths={result.attack_paths || []}
+                title="Comprehensive Mitigation Summary - All Attack Paths"
+                selectedMitigations={selectedMitigations}
+                toggleMitigationSelection={toggleMitigationSelection}
+              />
+            </>
+          )}
+        </div>
       )}
 
       {/* Standard Results View */}
@@ -1464,7 +1600,7 @@ function ThreatModelPage() {
               <span className="stat-value">{Math.round(result.execution_time_seconds / 60)}m</span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Coverage</span>
+              <span className="stat-label">Attack Surface Coverage</span>
               <span className="stat-value">{result.adversarial_summary?.coverage_estimate || 'N/A'}</span>
             </div>
           </div>
@@ -1475,6 +1611,21 @@ function ThreatModelPage() {
             <CsaRiskSummary
               csaRiskAssessment={result.csa_risk_assessment}
             />
+          )}
+
+          {/* Execution Timeline - Risk Assessment tab only */}
+          {activeTab === 'risk-assessment' && result.exploration_summary && (
+            <ExecutionTimeline result={result} runType="standard" />
+          )}
+
+          {/* Vulnerability Intelligence Summary */}
+          {(activeTab === 'main' || activeTab === 'attack-paths') && (
+            <VulnIntelSummary paths={result.csa_risk_assessment?.scored_paths || result.final_paths || []} />
+          )}
+
+          {/* Emergent Insights - Standard Run Types */}
+          {(activeTab === 'main' || activeTab === 'attack-paths') && result.emergent_insights && (
+            <EmergentInsightsStandard emergentInsights={result.emergent_insights} />
           )}
 
           {/* Attack Path Cards */}
