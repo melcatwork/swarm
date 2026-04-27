@@ -1,5 +1,6 @@
 #!/bin/bash
 # Start all services for Swarm TM: Ollama, Backend, Frontend
+# Updated: 2026-04-25 - Added Living Intelligence System support
 
 set -e
 
@@ -8,6 +9,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Log directory
@@ -61,34 +63,44 @@ if [ ! -f ".env" ]; then
 fi
 
 # Show configured LLM provider and model
-LLM_PROVIDER=$(grep "^LLM_PROVIDER=" .env | cut -d'=' -f2)
+LLM_PROVIDER=$(grep "^LLM_PROVIDER=" .env | cut -d'=' -f2 | tr -d ' "' | tr -d "'")
 if [ -n "$LLM_PROVIDER" ]; then
     echo -e "${BLUE}LLM Provider:${NC} ${GREEN}$LLM_PROVIDER${NC}"
 
     case "$LLM_PROVIDER" in
         "ollama")
-            OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env | cut -d'=' -f2)
-            echo -e "${BLUE}Ollama Model:${NC} ${GREEN}$OLLAMA_MODEL${NC}"
+            OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env | cut -d'=' -f2 | tr -d ' "' | tr -d "'")
+            echo -e "${BLUE}Ollama Model:${NC} ${GREEN}${OLLAMA_MODEL:-qwen3:14b}${NC}"
             ;;
         "bedrock")
-            BEDROCK_MODEL=$(grep "^BEDROCK_MODEL=" .env | cut -d'=' -f2)
-            echo -e "${BLUE}Bedrock Model:${NC} ${GREEN}$BEDROCK_MODEL${NC}"
+            BEDROCK_MODEL=$(grep "^BEDROCK_MODEL=" .env | cut -d'=' -f2 | tr -d ' "' | tr -d "'")
+            echo -e "${BLUE}Bedrock Model:${NC} ${GREEN}${BEDROCK_MODEL:-anthropic.claude-3-sonnet-20240229-v1:0}${NC}"
             ;;
         "anthropic")
-            ANTHROPIC_MODEL=$(grep "^ANTHROPIC_MODEL=" .env | cut -d'=' -f2)
-            echo -e "${BLUE}Anthropic Model:${NC} ${GREEN}$ANTHROPIC_MODEL${NC}"
+            ANTHROPIC_MODEL=$(grep "^ANTHROPIC_MODEL=" .env | cut -d'=' -f2 | tr -d ' "' | tr -d "'")
+            echo -e "${BLUE}Anthropic Model:${NC} ${GREEN}${ANTHROPIC_MODEL:-claude-sonnet-4-6}${NC}"
             ;;
     esac
     echo ""
 fi
+
+# Check for Living Intelligence System configuration
+echo -e "${PURPLE}Living Intelligence Status:${NC}"
+if grep -q "^AWS_BEARER_TOKEN_BEDROCK=" .env 2>/dev/null; then
+    echo -e "  ${GREEN}✓ AWS Bedrock configured for persona patch generation${NC}"
+elif grep -q "^ANTHROPIC_API_KEY=" .env 2>/dev/null; then
+    echo -e "  ${GREEN}✓ Anthropic API configured for persona patch generation${NC}"
+else
+    echo -e "  ${YELLOW}⚠ No LLM credentials for persona patch generation${NC}"
+    echo -e "    Set AWS_BEARER_TOKEN_BEDROCK or ANTHROPIC_API_KEY to enable"
+fi
+echo ""
 
 # =============================================================================
 # 1. Check LLM Provider
 # =============================================================================
 
 echo -e "${BLUE}[1/3] Checking LLM Provider...${NC}"
-
-LLM_PROVIDER=$(grep "^LLM_PROVIDER=" .env | cut -d'=' -f2)
 
 case "$LLM_PROVIDER" in
     "ollama")
@@ -134,7 +146,7 @@ case "$LLM_PROVIDER" in
         fi
 
         # Check if configured model is available
-        OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+        OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env | cut -d'=' -f2 | tr -d '"' | tr -d "'" | tr -d ' ')
         echo -n "  Checking for $OLLAMA_MODEL model... "
         if ollama list | grep -q "$OLLAMA_MODEL"; then
             echo -e "${GREEN}✓ Found${NC}"
@@ -148,15 +160,22 @@ case "$LLM_PROVIDER" in
 
     "bedrock")
         echo -e "${YELLOW}Provider: AWS Bedrock${NC}"
-        BEDROCK_MODEL=$(grep "^BEDROCK_MODEL=" .env | cut -d'=' -f2)
-        echo -e "  Model: ${GREEN}$BEDROCK_MODEL${NC}"
-        echo -e "${BLUE}  Note: Ensure AWS credentials are configured${NC}"
+        BEDROCK_MODEL=$(grep "^BEDROCK_MODEL=" .env | cut -d'=' -f2 | tr -d ' "' | tr -d "'")
+        echo -e "  Model: ${GREEN}${BEDROCK_MODEL:-anthropic.claude-3-sonnet-20240229-v1:0}${NC}"
+
+        # Check for bearer token
+        if grep -q "^AWS_BEARER_TOKEN_BEDROCK=" .env; then
+            echo -e "${GREEN}✓ AWS bearer token configured${NC}"
+        else
+            echo -e "${YELLOW}⚠ AWS_BEARER_TOKEN_BEDROCK not set${NC}"
+            echo -e "  Run: ${BLUE}bash backend/scripts/get_aws_token.sh${NC}"
+        fi
         ;;
 
     "anthropic")
         echo -e "${YELLOW}Provider: Anthropic API${NC}"
-        ANTHROPIC_MODEL=$(grep "^ANTHROPIC_MODEL=" .env | cut -d'=' -f2)
-        echo -e "  Model: ${GREEN}$ANTHROPIC_MODEL${NC}"
+        ANTHROPIC_MODEL=$(grep "^ANTHROPIC_MODEL=" .env | cut -d'=' -f2 | tr -d ' "' | tr -d "'")
+        echo -e "  Model: ${GREEN}${ANTHROPIC_MODEL:-claude-sonnet-4-6}${NC}"
         if grep -q "^ANTHROPIC_API_KEY=" .env; then
             echo -e "${GREEN}✓ API key configured${NC}"
         else
@@ -335,13 +354,14 @@ echo ""
 echo -e "  ${BLUE}# Check available LLM models${NC}"
 echo -e "  curl http://localhost:8000/api/llm/models"
 echo ""
+echo -e "  ${BLUE}# Check persona intelligence status${NC}"
+echo -e "  curl http://localhost:8000/api/swarm/persona-status | jq"
+echo ""
 echo -e "  ${BLUE}# Test samples (choose one):${NC}"
 echo -e "  curl -X POST http://localhost:8000/api/swarm/run/quick \\"
 echo -e "    -F \"file=@samples/capital-one-breach-replica.tf\""
 echo -e "  curl -X POST http://localhost:8000/api/swarm/run/quick \\"
 echo -e "    -F \"file=@samples/scarleteel-breach-replica.tf\""
-echo -e "  curl -X POST http://localhost:8000/api/swarm/run/quick \\"
-echo -e "    -F \"file=@samples/llmjacking-breach-replica.tf\""
 echo ""
 echo -e "${YELLOW}Four Run Modes Available:${NC}"
 echo -e "  ${GREEN}/api/swarm/run${NC}             ${BLUE}# Full pipeline (all agents, ~25-30 min)${NC}"
@@ -349,15 +369,30 @@ echo -e "  ${GREEN}/api/swarm/run/quick${NC}       ${BLUE}# Quick test (2 agents
 echo -e "  ${GREEN}/api/swarm/run/single${NC}      ${BLUE}# Single agent (specify ?agent_name=...)${NC}"
 echo -e "  ${GREEN}/api/swarm/run/stigmergic${NC}  ${BLUE}# Stigmergic swarm (sequential, emergent)${NC}"
 echo ""
-echo -e "${YELLOW}Recent Updates (2026-04-21):${NC}"
-echo -e "  ${GREEN}✓${NC} Attack paths now support up to ${GREEN}10 steps${NC} (was 3-5)"
-echo -e "  ${GREEN}✓${NC} All four run types updated"
-echo -e "  ${GREEN}✓${NC} Test suite: pytest tests/test_ten_step_paths.py"
+echo -e "${PURPLE}Living Intelligence System:${NC}"
+echo -e "  ${BLUE}# Setup automatic daily updates (run once)${NC}"
+echo -e "  ./setup-auto-intel-sync.sh"
 echo ""
-echo -e "${YELLOW}Recommended Agents for Single Agent Testing:${NC}"
-echo -e "  ${GREEN}apt29_cozy_bear${NC}       ${BLUE}# Nation-state sophistication, cloud-native${NC}"
-echo -e "  ${GREEN}scattered_spider${NC}     ${BLUE}# Identity/SSO/MFA specialist${NC}"
-echo -e "  ${GREEN}cloud_native_attacker${NC} ${BLUE}# Cloud services abuse expert${NC}"
+echo -e "  ${BLUE}# Sync threat intel manually${NC}"
+echo -e "  python3 backend/scripts/sync_intel.py --force"
+echo ""
+echo -e "  ${BLUE}# Review generated patches${NC}"
+echo -e "  python3 backend/scripts/review_patches.py --summary"
+echo ""
+echo -e "  ${BLUE}# Check persona intelligence status (API)${NC}"
+echo -e "  curl http://localhost:8000/api/swarm/persona-status | jq"
+echo ""
+echo -e "  ${BLUE}# Test Bedrock connection${NC}"
+echo -e "  python3 backend/scripts/test_bedrock_connection.py"
+echo ""
+echo -e "${YELLOW}Recent Updates (2026-04-25):${NC}"
+echo -e "  ${GREEN}✓${NC} Living Intelligence System ${GREEN}fully operational${NC}"
+echo -e "  ${GREEN}✓${NC} ${GREEN}69 AI-generated patches${NC} applied to personas"
+echo -e "  ${GREEN}✓${NC} Vulnerability Intelligence UI ${GREEN}(CVE evidence in paths)${NC}"
+echo -e "  ${GREEN}✓${NC} Persona status panel shows patch currency"
+echo -e "  ${GREEN}✓${NC} CVE aggregation summary (KEV, PoC, EPSS, CVSS)"
+echo -e "  ${GREEN}✓${NC} AWS Bedrock + Anthropic API support"
+echo -e "  ${GREEN}✓${NC} Attack paths support ${GREEN}up to 10 steps${NC} (was 3-5)"
 echo ""
 echo -e "${YELLOW}View Real-Time Logs:${NC}"
 echo -e "  tail -f $LOG_DIR/backend.log   ${BLUE}# Backend logs${NC}"

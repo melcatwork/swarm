@@ -14,6 +14,7 @@ echo -e "${BLUE}=================================${NC}"
 echo ""
 
 # Check LLM provider for more accurate status
+PURPLE='\033[0;35m'
 if [ -f ".env" ]; then
     LLM_PROVIDER=$(grep "^LLM_PROVIDER=" .env | cut -d'=' -f2 2>/dev/null)
 else
@@ -21,6 +22,19 @@ else
 fi
 
 echo -e "${YELLOW}LLM Provider:${NC} ${BLUE}$LLM_PROVIDER${NC}"
+echo ""
+
+# Show Living Intelligence System status
+echo -e "${PURPLE}Living Intelligence Status:${NC}"
+if [ -f ".env" ]; then
+    if grep -q "^AWS_BEARER_TOKEN_BEDROCK=" .env 2>/dev/null; then
+        echo -e "  ${GREEN}✓ AWS Bedrock configured for persona patch generation${NC}"
+    elif grep -q "^ANTHROPIC_API_KEY=" .env 2>/dev/null; then
+        echo -e "  ${GREEN}✓ Anthropic API configured for persona patch generation${NC}"
+    else
+        echo -e "  ${BLUE}No LLM credentials for persona patch generation${NC}"
+    fi
+fi
 echo ""
 
 STOPPED_ANY=false
@@ -148,6 +162,11 @@ echo ""
 echo -e "${YELLOW}To restart:${NC}"
 echo -e "  ./start-all.sh        ${BLUE}# Standard mode (logs in terminal)${NC}"
 echo -e "  ./start-all-tmux.sh   ${BLUE}# Tmux mode (split panes, recommended)${NC}"
+echo ""
+echo -e "${PURPLE}Living Intelligence & Vulnerability Intelligence:${NC}"
+echo -e "  python3 backend/scripts/review_patches.py --summary    ${BLUE}# Check patch status${NC}"
+echo -e "  curl http://localhost:8000/api/swarm/persona-status    ${BLUE}# Check persona API${NC}"
+echo -e "  python3 backend/scripts/sync_intel.py --force          ${BLUE}# Sync threat intel${NC}"
 echo ""
 echo -e "${YELLOW}Quick Status Check:${NC}"
 echo -e "  lsof -i :5173         ${BLUE}# Check frontend${NC}"

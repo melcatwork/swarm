@@ -23,6 +23,23 @@ if ! command -v tmux &> /dev/null; then
     exec ./start-all.sh
 fi
 
+# Check for Living Intelligence System configuration
+PURPLE='\033[0;35m'
+echo -e "${PURPLE}Living Intelligence Status:${NC}"
+if [ -f ".env" ]; then
+    if grep -q "^AWS_BEARER_TOKEN_BEDROCK=" .env 2>/dev/null; then
+        echo -e "  ${GREEN}✓ AWS Bedrock configured for persona patch generation${NC}"
+    elif grep -q "^ANTHROPIC_API_KEY=" .env 2>/dev/null; then
+        echo -e "  ${GREEN}✓ Anthropic API configured for persona patch generation${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ No LLM credentials for persona patch generation${NC}"
+        echo -e "    Set AWS_BEARER_TOKEN_BEDROCK or ANTHROPIC_API_KEY to enable"
+    fi
+else
+    echo -e "  ${YELLOW}⚠ .env file not found${NC}"
+fi
+echo ""
+
 # Check if session already exists
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     echo -e "${YELLOW}Session '$SESSION_NAME' already exists${NC}"
@@ -159,6 +176,9 @@ ${YELLOW}Quick Test Commands:${NC}
   ${BLUE}# Check available models${NC}
   curl http://localhost:8000/api/llm/models
 
+  ${BLUE}# Check persona intelligence status${NC}
+  curl http://localhost:8000/api/swarm/persona-status | jq
+
   ${BLUE}# Quick test (14 min, 2 agents)${NC}
   curl -X POST http://localhost:8000/api/swarm/run/quick \\
     -F \"file=@samples/capital-one-breach-replica.tf\"
@@ -169,10 +189,30 @@ ${YELLOW}Four Run Modes Available:${NC}
   ${GREEN}/api/swarm/run/single${NC}      - Single agent
   ${GREEN}/api/swarm/run/stigmergic${NC}  - Stigmergic swarm
 
-${YELLOW}Recent Updates (2026-04-21):${NC}
-  ${GREEN}✓${NC} Attack paths now support ${GREEN}up to 10 steps${NC}
-  ${GREEN}✓${NC} Multi-provider: Ollama/Bedrock/Anthropic
-  ${GREEN}✓${NC} Test suite: pytest tests/test_ten_step_paths.py
+${YELLOW}Recent Updates (2026-04-25):${NC}
+  ${GREEN}✓${NC} Living Intelligence System ${GREEN}fully operational${NC}
+  ${GREEN}✓${NC} ${GREEN}69 AI-generated patches${NC} applied to personas
+  ${GREEN}✓${NC} Vulnerability Intelligence UI ${GREEN}(CVE evidence in paths)${NC}
+  ${GREEN}✓${NC} Persona status panel shows patch currency
+  ${GREEN}✓${NC} CVE aggregation summary (KEV, PoC, EPSS, CVSS)
+  ${GREEN}✓${NC} AWS Bedrock + Anthropic API support
+  ${GREEN}✓${NC} Attack paths support ${GREEN}up to 10 steps${NC} (was 3-5)
+
+${PURPLE}Living Intelligence System:${NC}
+  ${BLUE}# Setup automatic daily updates (run once)${NC}
+  ./setup-auto-intel-sync.sh
+
+  ${BLUE}# Sync threat intel manually${NC}
+  python3 backend/scripts/sync_intel.py --force
+
+  ${BLUE}# Review generated patches${NC}
+  python3 backend/scripts/review_patches.py --summary
+
+  ${BLUE}# Check persona intelligence status (API)${NC}
+  curl http://localhost:8000/api/swarm/persona-status | jq
+
+  ${BLUE}# Test Bedrock connection${NC}
+  python3 backend/scripts/test_bedrock_connection.py
 
 ${YELLOW}Tmux Commands:${NC}
   ${BLUE}Ctrl+B then arrow keys${NC}  - Switch between panes
