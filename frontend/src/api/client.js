@@ -474,4 +474,21 @@ export const configureBedrockCredentials = async (config) => {
   }
 };
 
+/**
+ * Trigger manual persona intelligence sync
+ * Runs sync_intel.py in background to fetch latest threat intelligence
+ * and generate persona patches using Claude (Bedrock or Anthropic)
+ * @returns {Promise<Object>} Sync status { status, message, provider }
+ * @throws {Error} With user-friendly message on failure
+ */
+export const syncIntelligence = async () => {
+  try {
+    const response = await apiClient.post('/api/swarm/sync-intelligence');
+    return response.data;
+  } catch (error) {
+    const message = formatErrorMessage(error);
+    throw new Error(message);
+  }
+};
+
 export default apiClient;

@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import CveEvidenceStrip from './CveEvidenceStrip'
 
 const BAND_COLOURS = {
   'Low':         '#FFEB3B',
@@ -200,6 +201,10 @@ function StepRow({ step, index, pathId, selectedMitigations, toggleMitigationSel
         >
           {step.action_description || step.description}
         </div>
+
+        {/* CVE Evidence Strip - displays vulnerability intelligence */}
+        <CveEvidenceStrip step={step} />
+
         {step.outcome && (
           <div
             style={{
