@@ -423,8 +423,14 @@ A: Multi-agent LLM orchestration for threat modeling is **novel** (published 202
 
 ## 📋 Architecture Overview
 
-![Swarm TM Architecture](docs/architecture.png)
-*Click to enlarge: Comprehensive architecture showing 7-step workflow from user upload to threat model display*
+### Simplified Architecture (5-Step Process)
+
+![Swarm TM Simplified Architecture](docs/architecture-simple.png)
+*Click to enlarge: 5-step end-to-end workflow optimized for management presentations*
+
+**[View Detailed Technical Architecture →](docs/ARCHITECTURE.md)** | **[View Interactive Mermaid Diagram →](docs/architecture-simple.md)**
+
+**Quick Summary**: IaC Upload (15s) → Parse & Analyze (10s) → Multi-Agent Threat Modeling (20-25 min) → Risk Quantification (3s) → Interactive Dashboard (instant) = **~25 minutes total**
 
 ### Four Pipeline Modes (Detailed Comparison)
 
