@@ -154,6 +154,51 @@ CREATE INDEX IF NOT EXISTS idx_cve_epss
 CREATE INDEX IF NOT EXISTS idx_abuse_resource
     ON abuse_patterns(category);
 ''')
+        # Ensure persona patch tables exist
+        self.ensure_persona_patch_tables()
+
+    def ensure_persona_patch_tables(self):
+        """Create persona patch tables if they do not exist."""
+        with self._conn() as conn:
+            conn.executescript('''
+CREATE TABLE IF NOT EXISTS persona_patches (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    persona_id      TEXT NOT NULL,
+    patch_type      TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    source_name     TEXT,
+    source_url      TEXT,
+    rationale       TEXT,
+    confidence      TEXT,
+    signal_id       INTEGER,
+    created_at      TEXT DEFAULT (datetime('now')),
+    review_status   TEXT DEFAULT 'pending',
+    applied         INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS threat_intel_signals (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_type     TEXT,
+    actor_name      TEXT,
+    title           TEXT,
+    description     TEXT,
+    source_name     TEXT,
+    source_url      TEXT,
+    published_date  TEXT,
+    raw_content     TEXT,
+    processed       INTEGER DEFAULT 0,
+    ingested_at     TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_persona_patches_persona
+    ON persona_patches(persona_id);
+CREATE INDEX IF NOT EXISTS idx_persona_patches_applied
+    ON persona_patches(applied);
+CREATE INDEX IF NOT EXISTS idx_threat_intel_signals_processed
+    ON threat_intel_signals(processed);
+CREATE INDEX IF NOT EXISTS idx_threat_intel_signals_actor
+    ON threat_intel_signals(actor_name);
+''')
 
     def upsert_cve(self, entry: dict):
         with self._conn() as conn:

@@ -340,18 +340,33 @@ class PersonaRegistry:
 
     def _load(self) -> Dict:
         """
-        Load personas from YAML file.
+        Load personas from YAML file and merge with patches from intel.db.
 
         Returns:
-            Dictionary of personas
+            Dictionary of personas with patches applied
         """
         try:
+            # Try to load with patches from the new persona_loader
+            try:
+                from ..vuln_intel.persona_loader import load_personas_with_patches
+                personas_dict = load_personas_with_patches(apply_patches=True)
+
+                if personas_dict and isinstance(personas_dict, dict):
+                    logger.info(f"Loaded {len(personas_dict)} personas with patches applied")
+                    return personas_dict
+            except ImportError:
+                logger.debug("persona_loader not available, falling back to standard YAML load")
+            except Exception as e:
+                logger.warning(f"Failed to load with persona_loader: {e}, falling back to YAML only")
+
+            # Fallback to standard YAML load if persona_loader fails
             with open(self.config_path, "r") as f:
                 personas = yaml.safe_load(f)
                 if not isinstance(personas, dict):
                     logger.warning("Invalid personas file format, using defaults")
                     return DEFAULT_PERSONAS.copy()
                 return personas
+
         except Exception as e:
             logger.error(f"Failed to load personas: {e}")
             raise
