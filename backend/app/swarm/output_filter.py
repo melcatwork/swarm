@@ -139,6 +139,11 @@ def extract_confirmed_findings_as_paths(
                 'exploitation_commands': s.exploitation_commands,
                 'detection_gap': s.detection_gap,
                 'is_gap_filler': s.is_gap_filler,
+                # CVE and exploit intelligence fields
+                'cve_id': getattr(s, 'vuln_id', None) if s.vuln_id and s.vuln_id.startswith('CVE-') else None,
+                'exploit_ref': None,  # TODO: could be extracted from exploitation_commands
+                'epss': None,  # Not available in ChainStep
+                'kev_listed': None,  # Not available in ChainStep
             }
             for i, s in enumerate(chain.steps, 1)
         ]

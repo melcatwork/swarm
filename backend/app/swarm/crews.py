@@ -14,6 +14,8 @@ from crewai import Agent, Crew, Task, Process, LLM
 
 from .agents.persona_registry import PersonaRegistry
 from app.config import get_settings
+from .vuln_intel.vuln_context_builder import build_per_asset_context
+from .prompts.agent_instructions import VULN_GROUNDED_INSTRUCTION
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +212,32 @@ def build_exploration_crew(
         # Add vulnerability intelligence if available
         if vuln_context:
             full_backstory += f"\n{vuln_context.combined_prompt}\n\n"
+
+            # Build per-asset enriched vulnerability context
+            # First need to get assets from the asset_graph_json
+            try:
+                asset_graph_dict = json.loads(asset_graph_json)
+                assets = asset_graph_dict.get('assets', [])
+
+                # Build records_by_asset dict from matched_vulns
+                records_by_asset = {}
+                for vuln in vuln_context.matched_vulns:
+                    asset_id = vuln.resource_id
+                    if asset_id not in records_by_asset:
+                        records_by_asset[asset_id] = []
+                    records_by_asset[asset_id].append(vuln)
+
+                # Build and inject per-asset context
+                per_asset_context = build_per_asset_context(
+                    assets=assets,
+                    vuln_records=records_by_asset
+                )
+                full_backstory += f"\n\n=== PER-ASSET VULNERABILITY INTELLIGENCE ===\n{per_asset_context}\n\n"
+
+                # Add grounded instruction
+                full_backstory += f"\n{VULN_GROUNDED_INSTRUCTION}\n\n"
+            except Exception as e:
+                logger.warning(f"Failed to build per-asset context: {e}")
 
         full_backstory += (
             f"Current threat intelligence context:\n"

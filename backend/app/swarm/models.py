@@ -48,6 +48,11 @@ class AttackStep(BaseModel):
     target_asset: str = Field(..., description="Specific asset from graph")
     action_description: str = Field(..., description="What attacker does (2-3 sentences)")
     outcome: str = Field(..., description="What attacker gains")
+    # CVE and exploit intelligence fields (optional, populated when step uses known vulnerability)
+    cve_id: Optional[str] = Field(default=None, description="CVE identifier if step exploits known vulnerability")
+    exploit_ref: Optional[str] = Field(default=None, description="Primary PoC reference (e.g., EDB-50592, Nuclei template ID)")
+    epss: Optional[float] = Field(default=None, description="EPSS exploitation probability score (0.0-1.0)")
+    kev_listed: Optional[bool] = Field(default=None, description="Whether CVE is in CISA KEV catalog")
     mitigation: Optional[MitigationDetail] = Field(
         default=None,
         description="Primary mitigation (for backward compatibility)"
