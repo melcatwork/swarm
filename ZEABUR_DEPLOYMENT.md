@@ -17,22 +17,36 @@ Zeabur Service (trax.zeabur.app)
 
 ### Files Involved
 
-1. **`Procfile`** - Zeabur deployment command
-   - Runs `build.sh` to build frontend
-   - Starts uvicorn backend server
+1. **`zbpack.json`** - Zeabur build configuration (PRIMARY)
+   - Defines build, install, and start commands
+   - Ensures Node.js is available for frontend build
+   - Builds frontend → copies to `backend/static/` → installs Python deps → starts server
 
-2. **`build.sh`** - Build script
-   - Installs frontend dependencies (`npm ci`)
-   - Builds React app (`npm run build`)
-   - Copies build to `backend/static/`
+2. **`.buildpacks`** - Buildpack specification (FALLBACK)
+   - Specifies Node.js buildpack first, then Python buildpack
+   - Ensures both runtimes are available during build
 
-3. **`backend/app/main.py`** - FastAPI application
+3. **`package.json` (root)** - Node.js detection
+   - Signals to Zeabur that Node.js 20.x is required
+   - Provides npm build script as alternative build method
+
+4. **`backend/runtime.txt`** - Python version specification
+   - Explicitly requests Python 3.11
+
+5. **`Procfile`** - Start command
+   - Starts uvicorn backend server only (build handled by zbpack.json)
+
+6. **`backend/app/main.py`** - FastAPI application
    - Mounts `/assets` for static files
    - Serves `index.html` for all non-API routes (SPA routing)
+   - Enhanced logging to verify static directory status
 
-4. **`frontend/src/api/client.js`** - API client
+7. **`frontend/src/api/client.js`** - API client
    - Uses relative URLs in production (`import.meta.env.DEV`)
    - Uses `http://localhost:8000` in development
+
+8. **`build.sh`** - Local/Docker build script (NOT used by Zeabur)
+   - For local development and Docker Compose only
 
 ## Environment Variables (Zeabur)
 
@@ -80,9 +94,11 @@ DATABASE_URL=sqlite:///data/swarm_tm.db
 1. Click "Deploy"
 2. Zeabur will:
    - Clone the repository
-   - Run `build.sh` (builds frontend → `backend/static/`)
-   - Start backend with `uvicorn app.main:app`
-   - Serve frontend at `/` and API at `/api/*`
+   - Detect multi-language project from `zbpack.json` and `.buildpacks`
+   - Run Node.js buildpack: `npm ci --prefix frontend && npm run build --prefix frontend`
+   - Copy frontend build: `cp -r frontend/dist/* backend/static/`
+   - Run Python buildpack: `pip install -r backend/requirements.txt`
+   - Start backend with `uvicorn app.main:app` (serves frontend at `/` and API at `/api/*`)
 
 ### 4. Access Application
 
@@ -92,19 +108,35 @@ DATABASE_URL=sqlite:///data/swarm_tm.db
 
 ## Troubleshooting
 
-### 404 Errors on All Routes
+### 404 Errors on All Routes (FIXED in latest commit)
 
-**Symptom**: All requests return 404
+**Symptom**: All requests return 404, including `/api/health`
 
-**Causes**:
-1. Frontend not built - check Zeabur build logs for `build.sh` errors
-2. `backend/static/` directory missing - verify build completed
-3. Node.js/npm not available in build environment
+**Root Cause**: Node.js buildpack wasn't configured, so `npm` wasn't available during build. Frontend build failed, `backend/static/` was never created, and the catch-all route was never registered.
 
-**Solution**:
-- Check Zeabur build logs for errors
-- Ensure `build.sh` is executable (`chmod +x build.sh`)
-- Verify Node.js is available in Zeabur build environment
+**Fix Applied**:
+- Added `zbpack.json` with explicit build commands
+- Added `.buildpacks` to specify Node.js + Python buildpack order
+- Added root `package.json` for Node.js detection
+- Added `backend/runtime.txt` for Python 3.11
+- Enhanced logging to verify static directory status
+
+**Verification**:
+1. Check Zeabur build logs for:
+   - "Installing Node.js" or "Node.js buildpack"
+   - "npm ci --prefix frontend" success
+   - "npm run build --prefix frontend" success
+   - "cp -r frontend/dist/*" success
+
+2. Check application startup logs for:
+   ```
+   Checking frontend static directory at: /app/backend/static
+   Static directory exists: True
+   Static directory contents (X items): ['index.html', 'assets', ...]
+   Mounting frontend static files from: /app/backend/static
+   ```
+
+3. If still 404, trigger manual redeploy in Zeabur dashboard
 
 ### Frontend Loads But API Calls Fail
 
