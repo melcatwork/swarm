@@ -1,4 +1,4 @@
-# Railway Procfile for Swarm TM Backend
-# Deploys the FastAPI backend service
+# Zeabur Procfile for Swarm TM
+# Builds frontend and deploys FastAPI backend serving both frontend and API
 
-web: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: ./build.sh && cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT

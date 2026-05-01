@@ -8,10 +8,13 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from .config import settings, get_settings
 from .routers import threat_intel, iac_upload, swarm, archive, llm
@@ -199,3 +202,32 @@ async def llm_status():
         response["model_available"] = model_available
 
     return response
+
+
+# ============================================================================
+# Frontend serving (must be LAST to avoid catching API routes)
+# ============================================================================
+
+# Mount static files for frontend (production deployment)
+FRONTEND_BUILD_DIR = Path(__file__).parent.parent / "static"
+if FRONTEND_BUILD_DIR.exists():
+    logger.info(f"Mounting frontend static files from: {FRONTEND_BUILD_DIR}")
+
+    # Mount assets directory for static files (CSS, JS, images)
+    if (FRONTEND_BUILD_DIR / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(FRONTEND_BUILD_DIR / "assets")), name="static-assets")
+
+    # Catch-all route for frontend SPA (must be last)
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        """Serve frontend SPA for all non-API routes."""
+        # Serve index.html for all paths that don't start with 'api'
+        if not full_path.startswith("api"):
+            index_file = FRONTEND_BUILD_DIR / "index.html"
+            if index_file.exists():
+                return FileResponse(index_file)
+
+        # If API route not found, return 404
+        return {"detail": "Not found"}
+else:
+    logger.warning(f"Frontend build directory not found at {FRONTEND_BUILD_DIR}. Frontend will not be served.")

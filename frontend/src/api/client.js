@@ -7,9 +7,21 @@
 
 import axios from 'axios';
 
+// Determine base URL based on environment
+// In production (Zeabur), use relative URLs (same origin)
+// In development, use localhost:8000
+const getBaseURL = () => {
+  // Check if we're in development mode (Vite dev server)
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8000';
+  }
+  // Production: use relative URLs (same domain serves both frontend and backend)
+  return '';
+};
+
 // Create axios instance with base configuration
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: getBaseURL(),
   timeout: 1800000, // 30 minutes (increased for long-running LLM operations)
   headers: {
     'Content-Type': 'application/json',
