@@ -210,8 +210,18 @@ async def llm_status():
 
 # Mount static files for frontend (production deployment)
 FRONTEND_BUILD_DIR = Path(__file__).parent.parent / "static"
+
+# Log static directory status for debugging Zeabur deployment
+logger.info(f"Checking frontend static directory at: {FRONTEND_BUILD_DIR}")
+logger.info(f"Static directory exists: {FRONTEND_BUILD_DIR.exists()}")
+
 if FRONTEND_BUILD_DIR.exists():
     logger.info(f"Mounting frontend static files from: {FRONTEND_BUILD_DIR}")
+    try:
+        static_contents = list(FRONTEND_BUILD_DIR.iterdir())
+        logger.info(f"Static directory contents ({len(static_contents)} items): {[f.name for f in static_contents[:10]]}")
+    except Exception as e:
+        logger.error(f"Error listing static directory contents: {e}")
 
     # Mount assets directory for static files (CSS, JS, images)
     if (FRONTEND_BUILD_DIR / "assets").exists():

@@ -1,0 +1,15 @@
+{
+  "name": "swarm-tm",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "20.x",
+    "npm": "10.x"
+  },
+  "scripts": {
+    "build": "cd frontend && npm ci && npm run build && cd .. && mkdir -p backend/static && cp -r frontend/dist/* backend/static/"
+  },
+  "workspaces": [
+    "frontend"
+  ]
+}
