@@ -17,36 +17,42 @@ Zeabur Service (trax.zeabur.app)
 
 ### Files Involved
 
-1. **`zbpack.json`** - Zeabur build configuration (PRIMARY)
-   - Defines build, install, and start commands
-   - Ensures Node.js is available for frontend build
-   - Builds frontend → copies to `backend/static/` → installs Python deps → starts server
+1. **`Dockerfile`** - Multi-stage Docker build (PRIMARY)
+   - Stage 1: Builds React frontend with Node.js 20
+   - Stage 2: Python 3.11 backend + copies built frontend to `static/`
+   - Final image serves both frontend and API from one container
+   - Zeabur auto-detects and uses this Dockerfile
 
-2. **`.buildpacks`** - Buildpack specification (FALLBACK)
-   - Specifies Node.js buildpack first, then Python buildpack
-   - Ensures both runtimes are available during build
+2. **`.dockerignore`** - Docker build optimization
+   - Excludes node_modules, venv, .git, etc. from build context
+   - Speeds up builds and reduces image size
 
-3. **`package.json` (root)** - Node.js detection
-   - Signals to Zeabur that Node.js 20.x is required
-   - Provides npm build script as alternative build method
+3. **`.buildpacks`** - Buildpack fallback (kept for compatibility)
+   - Specifies Node.js + Python buildpack order
+   - Used if Dockerfile detection fails
 
-4. **`backend/runtime.txt`** - Python version specification
+4. **`package.json` (root)** - Node.js version specification
+   - Declares Node.js 20.x and npm 10.x requirements
+   - Used by Dockerfile and buildpacks
+
+5. **`backend/runtime.txt`** - Python version specification
    - Explicitly requests Python 3.11
 
-5. **`Procfile`** - Start command
-   - Starts uvicorn backend server only (build handled by zbpack.json)
+6. **`Procfile`** - Start command override (optional)
+   - Overrides Dockerfile CMD if needed
+   - Currently matches Dockerfile CMD
 
-6. **`backend/app/main.py`** - FastAPI application
+7. **`backend/app/main.py`** - FastAPI application
    - Mounts `/assets` for static files
    - Serves `index.html` for all non-API routes (SPA routing)
    - Enhanced logging to verify static directory status
 
-7. **`frontend/src/api/client.js`** - API client
+8. **`frontend/src/api/client.js`** - API client
    - Uses relative URLs in production (`import.meta.env.DEV`)
    - Uses `http://localhost:8000` in development
 
-8. **`build.sh`** - Local/Docker build script (NOT used by Zeabur)
-   - For local development and Docker Compose only
+9. **`build.sh`** - Local build script (NOT used by Zeabur)
+   - For local development and docker-compose only
 
 ## Environment Variables (Zeabur)
 
@@ -94,11 +100,18 @@ DATABASE_URL=sqlite:///data/swarm_tm.db
 1. Click "Deploy"
 2. Zeabur will:
    - Clone the repository
-   - Detect multi-language project from `zbpack.json` and `.buildpacks`
-   - Run Node.js buildpack: `npm ci --prefix frontend && npm run build --prefix frontend`
-   - Copy frontend build: `cp -r frontend/dist/* backend/static/`
-   - Run Python buildpack: `pip install -r backend/requirements.txt`
-   - Start backend with `uvicorn app.main:app` (serves frontend at `/` and API at `/api/*`)
+   - Detect `Dockerfile` in root directory
+   - Build Stage 1 (frontend-builder):
+     * Use node:20-slim image
+     * `npm ci` to install dependencies
+     * `npm run build` to build React app
+   - Build Stage 2 (final image):
+     * Use python:3.11-slim image
+     * `pip install -r requirements.txt`
+     * Copy backend code
+     * Copy built frontend from Stage 1 to `/app/static`
+   - Run container: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - Result: Single container serving frontend at `/` and API at `/api/*`
 
 ### 4. Access Application
 
@@ -108,35 +121,38 @@ DATABASE_URL=sqlite:///data/swarm_tm.db
 
 ## Troubleshooting
 
-### 404 Errors on All Routes (FIXED in latest commit)
+### 404 Errors on All Routes (FIXED)
 
 **Symptom**: All requests return 404, including `/api/health`
 
-**Root Cause**: Node.js buildpack wasn't configured, so `npm` wasn't available during build. Frontend build failed, `backend/static/` was never created, and the catch-all route was never registered.
+**Root Cause**: Initially tried buildpack approach, but Zeabur's working directory management made relative paths break. Switched to multi-stage Dockerfile for reliability.
 
-**Fix Applied**:
-- Added `zbpack.json` with explicit build commands
-- Added `.buildpacks` to specify Node.js + Python buildpack order
-- Added root `package.json` for Node.js detection
-- Added `backend/runtime.txt` for Python 3.11
+**Fix Applied** (Latest):
+- Multi-stage Dockerfile: Stage 1 builds frontend, Stage 2 serves backend
+- All paths absolute within Docker context (no cd issues)
+- `.dockerignore` optimizes build (excludes node_modules, venv, etc.)
 - Enhanced logging to verify static directory status
 
 **Verification**:
 1. Check Zeabur build logs for:
-   - "Installing Node.js" or "Node.js buildpack"
-   - "npm ci --prefix frontend" success
-   - "npm run build --prefix frontend" success
-   - "cp -r frontend/dist/*" success
+   - "Building Dockerfile" or "Dockerfile detected"
+   - Stage 1: `[frontend-builder X/Y]` steps completing
+   - Stage 2: `[stage-1 X/Y]` steps completing
+   - No errors in npm build or pip install
 
 2. Check application startup logs for:
    ```
-   Checking frontend static directory at: /app/backend/static
+   Checking frontend static directory at: /app/static
    Static directory exists: True
    Static directory contents (X items): ['index.html', 'assets', ...]
-   Mounting frontend static files from: /app/backend/static
+   Mounting frontend static files from: /app/static
    ```
 
-3. If still 404, trigger manual redeploy in Zeabur dashboard
+3. Test endpoints:
+   - `curl https://trax.zeabur.app/api/health` → `{"status":"ok"}`
+   - `curl -I https://trax.zeabur.app/` → HTTP 200
+
+4. If still failing, check Zeabur logs for Docker build errors
 
 ### Frontend Loads But API Calls Fail
 
