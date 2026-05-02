@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+
+# Python
+backend/__pycache__
+backend/**/__pycache__
+backend/.venv
+backend/venv
+backend/**/*.pyc
+backend/**/*.pyo
+backend/**/*.pyd
+backend/.Python
+backend/**/*.so
+backend/**/*.egg
+backend/**/*.egg-info
+backend/dist
+backend/build
+
+# Node
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/coverage
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.log
+
+# Database
+backend/data/*.db
+backend/data/*.db-journal
+
+# Documentation
+*.md
+!README.md
+
+# Build artifacts
+backend/static
+
+# Docker
+docker-compose.yml
+**/Dockerfile
+**/.dockerignore
+
+# Plans
+.claude

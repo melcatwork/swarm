@@ -1,5 +1,5 @@
 # Zeabur Procfile for Swarm TM
 # Deploys FastAPI backend serving both frontend and API
-# Build phase is handled by zbpack.json configuration
+# Build phase is handled by multi-stage Dockerfile
 
-web: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
