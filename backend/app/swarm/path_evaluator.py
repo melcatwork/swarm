@@ -180,26 +180,9 @@ versus speculative. Return JSON only.
             {"role": "user", "content": user},
         ]
 
-        # Build kwargs conditionally - some LiteLLM providers don't accept max_tokens in call()
-        call_kwargs = {
-            "messages": messages,
-        }
-
-        # Only add temperature if different from default
-        if temperature is not None and temperature != 0.7:
-            call_kwargs["temperature"] = temperature
-
-        # Try with max_tokens, but catch TypeError if not supported
-        try:
-            response = self.llm.call(**call_kwargs, max_tokens=max_tokens)
-        except TypeError as e:
-            if "max_tokens" in str(e):
-                # max_tokens not supported in call(), try without it
-                logger.warning(f"LLM call() doesn't support max_tokens parameter, using LLM's default. Error: {e}")
-                response = self.llm.call(**call_kwargs)
-            else:
-                raise
-
+        # Bedrock's call() method only accepts messages, not temperature or max_tokens
+        # Those parameters must be set during LLM initialization in get_llm()
+        response = self.llm.call(messages=messages)
         return response
 
     def _summarise_findings(self, findings: List[Any]) -> str:
