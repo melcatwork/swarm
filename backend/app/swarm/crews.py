@@ -908,6 +908,74 @@ def build_evaluation_crew(
     return crew
 
 
+def _extract_evaluation_scores(evaluation_results) -> List[Dict]:
+    """
+    Extract evaluation score objects from CrewAI output.
+
+    Unlike parse_exploration_results(), this does NOT validate as attack paths.
+    Evaluation results are score objects like:
+    {"path_name": "X", "feasibility_score": 7, "justification": "..."}
+
+    Args:
+        evaluation_results: Raw output from evaluation crew.kickoff()
+
+    Returns:
+        List of evaluation score dictionaries
+    """
+    evaluation_scores = []
+
+    # Handle different CrewAI output formats
+    if hasattr(evaluation_results, "tasks_output"):
+        task_outputs = evaluation_results.tasks_output
+    elif hasattr(evaluation_results, "task_outputs"):
+        task_outputs = evaluation_results.task_outputs
+    else:
+        task_outputs = [evaluation_results]
+
+    for idx, task_output in enumerate(task_outputs):
+        try:
+            # Extract raw output text
+            if hasattr(task_output, "raw"):
+                output_text = task_output.raw
+            elif hasattr(task_output, "result"):
+                output_text = task_output.result
+            else:
+                output_text = str(task_output)
+
+            # Clean markdown code blocks
+            output_text = output_text.strip()
+            if output_text.startswith("```"):
+                output_text = re.sub(r"^```(?:json)?", "", output_text, flags=re.IGNORECASE)
+                output_text = re.sub(r"```$", "", output_text)
+                output_text = output_text.strip()
+
+            # Parse JSON
+            parsed_output = json.loads(output_text)
+
+            # Handle both array and single object
+            if isinstance(parsed_output, list):
+                scores = parsed_output
+            elif isinstance(parsed_output, dict):
+                scores = [parsed_output]
+            else:
+                logger.warning(f"Evaluation task {idx + 1} output is neither list nor dict, skipping")
+                continue
+
+            # Add scores to result (no validation needed - they're already score objects)
+            evaluation_scores.extend(scores)
+            logger.info(f"Evaluation task {idx + 1}: Extracted {len(scores)} score objects")
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from evaluation task {idx + 1}: {e}")
+            continue
+        except Exception as e:
+            logger.error(f"Error extracting evaluation scores from task {idx + 1}: {e}")
+            continue
+
+    logger.info(f"Total evaluation scores extracted: {len(evaluation_scores)}")
+    return evaluation_scores
+
+
 def aggregate_scores(
     exploration_paths: List[Dict],
     evaluation_results,
@@ -934,8 +1002,8 @@ def aggregate_scores(
     """
     logger.info("Aggregating evaluation scores with attack paths")
 
-    # Parse evaluation results to extract scores
-    evaluation_scores = parse_exploration_results(evaluation_results)
+    # Extract evaluation scores directly (they're already in correct format, not attack paths)
+    evaluation_scores = _extract_evaluation_scores(evaluation_results)
 
     # Build lookup dictionaries by path_name for each score type
     feasibility_lookup = {}
