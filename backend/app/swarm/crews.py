@@ -1219,26 +1219,22 @@ def build_adversarial_crew(
         verbose=True,
         allow_delegation=False,
         llm=llm,
+        max_iter=3,  # Limit reasoning iterations to prevent infinite loops
     )
 
     arbitrator_task = Task(
         description=(
             "Produce the final validated threat model by synthesizing all inputs. "
             "For each attack path (original scored paths + red team additions): "
-            "1) Apply blue team challenges - if a path was challenged, decide if it's still valid or needs revision, "
-            "2) Assign a confidence rating: high (validated, no significant challenges), "
-            "medium (partially challenged but still viable), low (significant challenges or gaps), "
-            "3) Add validation notes explaining the confidence rating and any challenge resolutions, "
-            "4) Mark whether the path was challenged and how the challenge was resolved. "
-            "Include an executive summary (2-3 sentences) of the overall threat model findings."
+            "1) Apply blue team challenges - decide if path is still valid, "
+            "2) Assign confidence rating: high/medium/low, "
+            "3) Add validation notes explaining confidence, "
+            "4) Mark if challenged and how resolved. "
+            "Include 2-3 sentence executive summary."
         ),
         expected_output=(
-            "A JSON object with: "
-            "final_paths (array of complete path objects with all original data plus: "
-            "confidence ('high'|'medium'|'low'), validation_notes (string), "
-            "challenged (boolean), challenge_resolution (string or null)), "
-            "executive_summary (string: 2-3 sentence summary of threat model findings). "
-            "Return ONLY valid JSON, no markdown."
+            "JSON with final_paths array and executive_summary string. "
+            "Format flexibly - parser will extract. Markdown wrappers OK."
         ),
         agent=arbitrator_agent,
     )
@@ -1278,6 +1274,20 @@ def parse_adversarial_results(
         - coverage_assessment: Attack surface coverage estimate
     """
     logger.info("Parsing adversarial crew results")
+
+    # Handle timeout fallback immediately
+    if isinstance(crew_output, dict) and crew_output.get("timeout_occurred"):
+        logger.warning("Adversarial validation timed out - using scored paths as fallback")
+        return {
+            "final_paths": crew_output.get("final_paths", scored_paths),
+            "red_analysis": {},
+            "blue_challenges": {},
+            "executive_summary": crew_output.get(
+                "executive_summary",
+                "Threat model validation incomplete due to timeout. Results based on scored paths only."
+            ),
+            "coverage_assessment": "Timeout occurred - coverage not assessed",
+        }
 
     result = {
         "final_paths": [],

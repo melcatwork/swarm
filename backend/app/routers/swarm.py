@@ -71,6 +71,43 @@ CREW_TIMEOUT_SECONDS = 5400  # 90 minutes for long-running threat modeling opera
 executor = ThreadPoolExecutor(max_workers=2)  # Max 2 concurrent pipeline runs
 
 
+def timeout_crew_execution(crew_kickoff_callable, timeout_seconds: int, fallback_data: dict):
+    """
+    Execute crew.kickoff() with a timeout using ThreadPoolExecutor.
+
+    Args:
+        crew_kickoff_callable: Callable that executes crew.kickoff()
+        timeout_seconds: Maximum seconds to wait
+        fallback_data: Data to return if timeout occurs
+
+    Returns:
+        Crew output or fallback data if timeout
+
+    Raises:
+        Exception: If crew execution fails (non-timeout errors propagate)
+    """
+    from concurrent.futures import TimeoutError as FutureTimeoutError
+
+    # Use a dedicated executor for this timeout to avoid blocking the main thread pool
+    timeout_executor = ThreadPoolExecutor(max_workers=1)
+    future = timeout_executor.submit(crew_kickoff_callable)
+
+    try:
+        result = future.result(timeout=timeout_seconds)
+        return result
+    except FutureTimeoutError:
+        logger.error(
+            f"Crew execution timeout after {timeout_seconds}s - returning fallback data"
+        )
+        # Add timeout flag to fallback data
+        fallback_with_flag = dict(fallback_data)
+        fallback_with_flag["timeout_occurred"] = True
+        return fallback_with_flag
+    finally:
+        # Clean up executor (note: this doesn't kill the running thread, just prevents new submissions)
+        timeout_executor.shutdown(wait=False)
+
+
 def check_llm_configured():
     """
     Check if LLM is properly configured with credentials.
@@ -781,7 +818,15 @@ def _run_exploration(
     )
 
     logger.info(f"Executing exploration crew with {len(crew.agents)} agents")
-    crew_output = crew.kickoff()
+    crew_output = timeout_crew_execution(
+        crew_kickoff_callable=crew.kickoff,
+        timeout_seconds=CREW_TIMEOUT_SECONDS,
+        fallback_data={
+            "raw_output": "[]",
+            "final_output": [],
+            "tasks_output": []
+        }
+    )
 
     # Parse results
     logger.info("Parsing exploration results")
@@ -899,7 +944,15 @@ def _run_evaluation(
     crew = build_evaluation_crew(attack_paths_json, asset_graph_json, model_override=model)
 
     logger.info(f"Executing evaluation crew with {len(crew.agents)} evaluators")
-    crew_output = crew.kickoff()
+    crew_output = timeout_crew_execution(
+        crew_kickoff_callable=crew.kickoff,
+        timeout_seconds=CREW_TIMEOUT_SECONDS,
+        fallback_data={
+            "raw_output": "[]",
+            "final_output": [],
+            "tasks_output": []
+        }
+    )
 
     # Aggregate scores
     logger.info("Aggregating evaluation scores")
@@ -1757,7 +1810,14 @@ async def run_full_pipeline(
 
         # Build and execute adversarial crew
         adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json, model_override=model)
-        adversarial_output = adversarial_crew.kickoff()
+        adversarial_output = timeout_crew_execution(
+            crew_kickoff_callable=adversarial_crew.kickoff,
+            timeout_seconds=CREW_TIMEOUT_SECONDS,
+            fallback_data={
+                "final_paths": scored_paths,
+                "executive_summary": "Threat model validation incomplete due to timeout. Results based on scored paths only."
+            }
+        )
 
         # Parse adversarial results
         adversarial_result = parse_adversarial_results(adversarial_output, scored_paths)
@@ -2138,7 +2198,14 @@ async def run_quick_pipeline(
         asset_graph_json = json.dumps(asset_graph_dict, indent=2)
 
         adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json, model_override=model)
-        adversarial_output = adversarial_crew.kickoff()
+        adversarial_output = timeout_crew_execution(
+            crew_kickoff_callable=adversarial_crew.kickoff,
+            timeout_seconds=CREW_TIMEOUT_SECONDS,
+            fallback_data={
+                "final_paths": scored_paths,
+                "executive_summary": "Threat model validation incomplete due to timeout. Results based on scored paths only."
+            }
+        )
 
         adversarial_result = parse_adversarial_results(adversarial_output, scored_paths)
         adversarial_time = time.time() - adversarial_start
@@ -2526,7 +2593,14 @@ async def run_single_agent_pipeline(
         asset_graph_json = json.dumps(asset_graph_dict, indent=2)
 
         adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json, model_override=model)
-        adversarial_output = adversarial_crew.kickoff()
+        adversarial_output = timeout_crew_execution(
+            crew_kickoff_callable=adversarial_crew.kickoff,
+            timeout_seconds=CREW_TIMEOUT_SECONDS,
+            fallback_data={
+                "final_paths": scored_paths,
+                "executive_summary": "Threat model validation incomplete due to timeout. Results based on scored paths only."
+            }
+        )
 
         adversarial_result = parse_adversarial_results(adversarial_output, scored_paths)
         adversarial_time = time.time() - adversarial_start
@@ -2962,7 +3036,14 @@ def _run_quick_pipeline_sync(job_id: str, file_content: bytes, filename: str, mo
             asset_graph_json = json.dumps(asset_graph_dict, indent=2)
 
             adversarial_crew = build_adversarial_crew(scored_paths_json, asset_graph_json, model_override=model)
-            adversarial_output = adversarial_crew.kickoff()
+            adversarial_output = timeout_crew_execution(
+                crew_kickoff_callable=adversarial_crew.kickoff,
+                timeout_seconds=CREW_TIMEOUT_SECONDS,
+                fallback_data={
+                    "final_paths": scored_paths,
+                    "executive_summary": "Threat model validation incomplete due to timeout. Results based on scored paths only."
+                }
+            )
             adversarial_result = parse_adversarial_results(adversarial_output, scored_paths)
             adversarial_time = time.time() - adversarial_start
             
