@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.5
     LLM_MAX_TOKENS: int = 4096
     LLM_CONTEXT_WINDOW: int = 32000
-    LLM_TIMEOUT_SECONDS: int = 600
+    LLM_TIMEOUT_SECONDS: int = 5400  # 90 minutes for long-running threat modeling operations
     LLM_RETRY_ATTEMPTS: int = 3
 
     # Database

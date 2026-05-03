@@ -76,6 +76,18 @@ def get_llm(model_override: str = None, provider_override: str = None) -> LLM:
             os.environ["AWS_DEFAULT_REGION"] = settings.AWS_REGION
             os.environ["AWS_REGION"] = settings.AWS_REGION
 
+        # Configure boto3 timeouts for long-running Bedrock calls
+        import botocore.config
+        boto_config = botocore.config.Config(
+            read_timeout=settings.LLM_TIMEOUT_SECONDS,
+            connect_timeout=60,
+            retries={'max_attempts': 3, 'mode': 'standard'}
+        )
+        # Pass boto config via environment for LiteLLM to use
+        os.environ["AWS_READ_TIMEOUT"] = str(settings.LLM_TIMEOUT_SECONDS)
+        os.environ["AWS_CONNECT_TIMEOUT"] = "60"
+        logger.info(f"Configured Bedrock with {settings.LLM_TIMEOUT_SECONDS}s read timeout")
+
         # Format model name for Bedrock
         bedrock_model = model_override or settings.BEDROCK_MODEL
         # If model doesn't have bedrock/ prefix, add it

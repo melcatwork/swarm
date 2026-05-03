@@ -22,7 +22,7 @@ const getBaseURL = () => {
 // Create axios instance with base configuration
 const apiClient = axios.create({
   baseURL: getBaseURL(),
-  timeout: 1800000, // 30 minutes (increased for long-running LLM operations)
+  timeout: 5400000, // 90 minutes (increased for long-running threat modeling operations)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -191,7 +191,7 @@ export const uploadAndRunSwarm = async (file, model = null, impactScore = 3, can
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 1800000, // 30 minutes for full pipeline (increased for larger models)
+      timeout: 5400000, // 90 minutes for full pipeline (long-running operations)
       cancelToken: cancelToken, // Support request cancellation
     });
     return response.data;
@@ -221,7 +221,7 @@ export const uploadAndRunQuick = async (file, model = null, impactScore = 3, can
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 1200000, // 20 minutes for quick pipeline (increased for larger models)
+      timeout: 3600000, // 60 minutes for quick pipeline (can still be long-running)
       cancelToken: cancelToken, // Support request cancellation
     });
     return response.data;
@@ -252,7 +252,7 @@ export const uploadAndRunSingleAgent = async (file, agentName, model = null, imp
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 1200000, // 20 minutes for single agent pipeline (increased for larger models)
+      timeout: 5400000, // 90 minutes for single agent pipeline (can be long-running)
       cancelToken: cancelToken, // Support request cancellation
     });
     return response.data;
@@ -283,7 +283,7 @@ export const uploadAndRunStigmergic = async (file, executionOrder = 'capability_
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 2400000, // 40 minutes for stigmergic swarm (sequential execution of multiple agents)
+      timeout: 5400000, // 90 minutes for stigmergic swarm (long-running sequential execution)
       cancelToken: cancelToken, // Support request cancellation
     });
     return response.data;

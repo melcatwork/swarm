@@ -65,7 +65,7 @@ persona_registry = PersonaRegistry()
 MAX_FILE_SIZE_MB = 1
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 SUPPORTED_EXTENSIONS = [".tf", ".yaml", ".yml", ".json"]
-CREW_TIMEOUT_SECONDS = 600  # 10 minutes max for any single crew operation
+CREW_TIMEOUT_SECONDS = 5400  # 90 minutes for long-running threat modeling operations
 
 # Thread pool for background pipeline execution
 executor = ThreadPoolExecutor(max_workers=2)  # Max 2 concurrent pipeline runs
