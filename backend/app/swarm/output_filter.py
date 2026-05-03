@@ -80,6 +80,20 @@ def filter_and_rank_paths(
         elif composite >= min_composite_score:
             path['grounded_in_confirmed_vuln'] = False
             score_filtered.append(path)
+        elif not confirmed_vuln_ids:
+            # Fallback: If no confirmed vulns found, include all arbitrator paths
+            path['grounded_in_confirmed_vuln'] = False
+            path['include_reason'] = f'No confirmed vulns found - arbitrator validated (score: {composite:.1f})'
+            score_filtered.append(path)
+        # Else: path has low score AND confirmed vulns exist → legitimately filter it out
+
+    # If NO paths passed filters but we have input paths, log warning
+    if not must_include and not score_filtered and paths:
+        logger.warning(
+            f"Output filter rejected all {len(paths)} paths! "
+            f"Confirmed vulns: {len(confirmed_vuln_ids)}, "
+            f"Min score threshold: {min_composite_score}"
+        )
 
     for group in (must_include, score_filtered):
         group.sort(
